@@ -108,7 +108,7 @@ $(document).ready(function() {
         updateActiveLinks('#project-nav', 'project', 'project');
         updateActiveLinks('#category-nav', 'category', 'category');
         updateActiveLinks('#variable-nav', 'variable', 'variable');
-        updateActiveLinks('#plottype-nav', 'plottype', 'plottype');
+        updateActiveLinks('#plottype-nav', 'plottype', 'plotType');
 
         // Auto-select first item if not set
         if (activeSelections.project && !activeSelections.category) {
