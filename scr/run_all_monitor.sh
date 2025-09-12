@@ -45,6 +45,7 @@ chmod +x verify_cpp_parallel
   "$(readlink -f ${VFLD_ROOT}/${EXP2})"
 
 cd "$RBASE"
+
 # Convert CSV output to Parquet for the scorecard script
 METRICS_CSV="${WORKDIR}/surface_metrics.csv"
 if [[ -f "$METRICS_CSV" ]]; then
@@ -54,9 +55,31 @@ else
     echo "WARNING: C++ verification did not produce surface_metrics.csv"
 fi
 
+EXP_COLORS_STR="${EXP_COLORS:-#1f77b4 #d62728}"
 
 # --- Run Scorecard for Surface Metrics ---
 METRICS_FILE="${WORKDIR}/surface_metrics.parquet"
+if [[ -f "$METRICS_FILE" ]]; then
+    echo "Building timeseries and lead time plots for monitor surface metrics..."
+    EXPS=("$EXP1" "$EXP2")
+    read -r -a EXP_COLORS <<< "$EXP_COLORS_STR"
+
+    COLOR_ARGS=()
+    for i in "${!EXPS[@]}"; do
+      if [[ -n "${EXP_COLORS[$i]:-}" ]]; then
+        COLOR_ARGS+=(--exp-color "${EXPS[$i]}"="${EXP_COLORS[$i]}")
+      fi
+    done
+
+    python3 -m src.monitor_plotting \
+      --metrics "$METRICS_FILE" \
+      --outdir "$PLOTS" \
+      --title-prefix "${PROJECTNAME}_surface" \
+      "${COLOR_ARGS[@]}"
+else
+  echo "WARNING: ${METRICS_FILE} not found. Skipping timeseries and lead time plots."
+fi
+
 if [[ -f "$METRICS_FILE" ]]; then
   echo "Building scorecard for monitor surface metrics..."
   python3 -m src.scorecard \
