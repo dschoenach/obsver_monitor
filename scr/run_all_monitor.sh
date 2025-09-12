@@ -76,6 +76,19 @@ else
   echo "WARNING: ${METRICS_FILE} not found. Skipping scorecard."
 fi
 
+# --- Run Scorecard for Temp Profiles ---
+if [[ -f "$TEMP_METRICS_FILE" ]]; then
+  echo "Building scorecard for monitor temp profiles..."
+  python3 -m src.scorecard \
+    --exp-a "$EXP1" \
+    --exp-b "$EXP2" \
+    --metrics "$TEMP_METRICS_FILE" \
+    --outdir "$PLOTS" \
+    --title "${PROJECTNAME}_temp"
+else
+  echo "WARNING: ${TEMP_METRICS_FILE} not found. Skipping temp scorecard."
+fi
+
 # --- Run Plotting for Surface Metrics ---
 if [[ -f "$METRICS_FILE" ]]; then
   echo "Building timeseries and lead time plots for monitor surface metrics..."

@@ -60,3 +60,6 @@ echo -e "\n=================================================="
 echo "    COMPLETE VERIFICATION SUITE FINISHED"
 echo "    Results are in: ${MASTER_OUTPUT}"
 echo "=================================================="
+
+pwd
+rm -rf '"'
