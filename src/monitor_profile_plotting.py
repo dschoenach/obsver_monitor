@@ -61,7 +61,7 @@ def plot_temp_profiles(df: pl.DataFrame, outdir: str, exp_colors: Dict[str, str]
 
         if xmin is not None and xmax is not None:
             span = xmax - xmin if xmax != xmin else (abs(xmax) if xmax != 0 else 1.0)
-            ax.set_xlim(xmin - 0.05*span, xmax + 0.18*span)
+            ax.set_xlim(xmin - 0.05*span, xmax + 0.30*span)
 
         ax.axvline(0, color='black', linestyle='-', linewidth=1)
         ax.set_title(f"Temp Profile - {var}")
@@ -70,7 +70,7 @@ def plot_temp_profiles(df: pl.DataFrame, outdir: str, exp_colors: Dict[str, str]
         ax.set_yticks(counts["pressure_level"].to_list())
         ax.invert_yaxis()
         ax.grid(True, which="both", linestyle="--", linewidth=0.5, alpha=0.7)
-        ax.legend(handles=line_handles, loc="upper right", framealpha=0.85, ncol=1, frameon=False)
+        ax.legend(handles=line_handles, loc="upper right", frameon=False)
         fig.tight_layout()
 
         plot_dir = os.path.join(outdir, f"temp_{var}")
@@ -104,6 +104,7 @@ def plot_series(df: pl.DataFrame, outdir: str, exp_colors: Dict[str, str], x_axi
         line_handles = []
         exps_in_order = list(exp_colors.keys())
         ymax, ymin = None, None
+        xmax, xmin = None, None
 
         for exp in exps_in_order:
             sub = var_df.filter(pl.col("experiment") == exp).sort(x_axis)
@@ -122,9 +123,20 @@ def plot_series(df: pl.DataFrame, outdir: str, exp_colors: Dict[str, str], x_axi
                 ymax = vmax if ymax is None else max(ymax, vmax)
                 ymin = vmin if ymin is None else min(ymin, vmin)
 
+            if x_axis == 'lead_time':
+                x_vals = sub[x_axis].to_list()
+                if x_vals:
+                    xmin_local = min(x_vals); xmax_local = max(x_vals)
+                    xmax = xmax_local if xmax is None else max(xmax, xmax_local)
+                    xmin = xmin_local if xmin is None else min(xmin, xmin_local)
+
         if ymin is not None and ymax is not None:
             span = ymax - ymin if ymax != ymin else (abs(ymax) if ymax != 0 else 1.0)
-            ax.set_ylim(ymin - 0.05 * span, ymax + 0.18 * span)
+            ax.set_ylim(ymin - 0.05 * span, ymax + 0.30 * span)
+
+        if x_axis == 'lead_time' and xmin is not None and xmax is not None:
+            span = xmax - xmin if xmax != xmin else (abs(xmax) if xmax != 0 else 1.0)
+            ax.set_xlim(xmin - 0.05*span, xmax + 0.30*span)
 
         ax.axhline(0, color='black', linestyle='-', linewidth=1)
         ax.set_title(f"Temp Series - {var} - {x_label}")
@@ -132,7 +144,7 @@ def plot_series(df: pl.DataFrame, outdir: str, exp_colors: Dict[str, str], x_axi
         ax.set_ylabel("Value")
         ax.tick_params(axis='x', rotation=45)
         ax.grid(True, linestyle="--", linewidth=0.5, alpha=0.7)
-        ax.legend(handles=line_handles, loc="upper right", framealpha=0.85, frameon=False)
+        ax.legend(handles=line_handles, loc="upper right", frameon=False)
         fig.tight_layout()
 
         plot_dir = os.path.join(outdir, f"temp_{var}")

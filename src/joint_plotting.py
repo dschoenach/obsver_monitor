@@ -75,7 +75,7 @@ def plot_combined_tb_profiles(df: pl.DataFrame, outdir: str, title_prefix: str, 
 
     if xmin is not None and xmax is not None:
         span = xmax - xmin if xmax != xmin else (abs(xmax) if xmax != 0 else 1.0)
-        ax.set_xlim(xmin - 0.05*span, xmax + 0.18*span)
+        ax.set_xlim(xmin - 0.05*span, xmax + 0.30*span)
 
     ax.axvline(0, color='black', linestyle='-', linewidth=1)
     ax.set_title(f"{title_prefix} - Vertical Profiles")
@@ -83,7 +83,7 @@ def plot_combined_tb_profiles(df: pl.DataFrame, outdir: str, title_prefix: str, 
     ax.set_ylabel("Channel")
     ax.set_yticks(counts["channel"].to_list())
     ax.grid(True, which="both", linestyle="--", linewidth=0.5, alpha=0.7)
-    ax.legend(handles=line_handles, loc="upper right", framealpha=0.85, ncol=1, frameon=False)
+    ax.legend(handles=line_handles, loc="upper right", frameon=False)
     fig.tight_layout()
     path = os.path.join(outdir, f"{title_prefix}_profile{lead_time_str}.png")
     fig.savefig(path, bbox_inches="tight")
@@ -131,7 +131,7 @@ def plot_combined_profiles(df: pl.DataFrame, outdir: str, title_prefix: str, exp
 
     if xmin is not None and xmax is not None:
         span = xmax - xmin if xmax != xmin else (abs(xmax) if xmax != 0 else 1.0)
-        ax.set_xlim(xmin - 0.05*span, xmax + 0.18*span)
+        ax.set_xlim(xmin - 0.05*span, xmax + 0.30*span)
 
     ax.axvline(0, color='black', linestyle='-', linewidth=1)
     ax.set_title(f"{title_prefix} - Vertical Profiles")
@@ -141,7 +141,7 @@ def plot_combined_profiles(df: pl.DataFrame, outdir: str, title_prefix: str, exp
     ax.set_yticklabels(list(BRACKET_MIDPOINTS.keys()))
     ax.invert_yaxis()
     ax.grid(True, which="both", linestyle="--", linewidth=0.5, alpha=0.7)
-    ax.legend(handles=line_handles, loc="upper right", framealpha=0.85, ncol=1, frameon=False)
+    ax.legend(handles=line_handles, loc="upper right", frameon=False)
     fig.tight_layout()
     path = os.path.join(outdir, f"{title_prefix}_profile{lead_time_str}.png")
     fig.savefig(path, bbox_inches="tight")
@@ -184,7 +184,7 @@ def plot_combined_timeseries(df: pl.DataFrame, outdir: str, title_prefix: str, e
 
     if ymin is not None and ymax is not None:
         span = ymax - ymin if ymax != ymin else (abs(ymax) if ymax != 0 else 1.0)
-        ax.set_ylim(ymin - 0.05*span, ymax + 0.18*span)
+        ax.set_ylim(ymin - 0.05*span, ymax + 0.30*span)
 
     ax.axhline(0, color='black', linestyle='-', linewidth=1)
     ax.set_title(f"{title_prefix} - Time Series")
@@ -192,7 +192,7 @@ def plot_combined_timeseries(df: pl.DataFrame, outdir: str, title_prefix: str, e
     ax.set_ylabel("Value")
     ax.tick_params(axis='x', rotation=45)
     ax.grid(True, linestyle="--", linewidth=0.5, alpha=0.7)
-    ax.legend(handles=line_handles, loc="upper right", framealpha=0.85, frameon=False)
+    ax.legend(handles=line_handles, loc="upper right", frameon=False)
     fig.tight_layout()
     path = os.path.join(outdir, f"{title_prefix}_timeseries{lead_time}.png")
     fig.savefig(path, bbox_inches="tight")
