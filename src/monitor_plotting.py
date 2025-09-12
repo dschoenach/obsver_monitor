@@ -93,7 +93,7 @@ def plot_series(df: pl.DataFrame, outdir: str, title_prefix: str, exp_colors: Di
         plt.close(fig)
         print(f"Saved plot: {path}")
 
-def main() -> None:
+def main() -> None: 
     parser = argparse.ArgumentParser(description="Monitor plotting for multiple experiments.")
     parser.add_argument("--metrics", nargs="+", required=True, help="Metrics parquet files.")
     parser.add_argument("--outdir", required=True, help="Output directory for plots.")
@@ -102,8 +102,6 @@ def main() -> None:
                         help="Experiment color mapping EXP=COLOR (repeatable).")
     parser.add_argument("--exp-name", action="append",
                         help="Experiment name mapping LONG_NAME=SHORT_NAME (repeatable).")
-    parser.add_argument("--start-date", help="Start date for title.")
-    parser.add_argument("--end-date", help="End date for title.")
     args = parser.parse_args()
     os.makedirs(args.outdir, exist_ok=True)
 
@@ -127,6 +125,9 @@ def main() -> None:
         print("No valid metrics loaded; aborting.")
         return
     all_df = pl.concat(dfs, how="vertical_relaxed")
+
+    start_date = all_df["vt_hour"].min()
+    end_date = all_df["vt_hour"].max()
 
     exp_names_map: Dict[str, str] = {}
     if args.exp_name:
@@ -153,8 +154,8 @@ def main() -> None:
         if e not in exp_colors:
             exp_colors[e] = next(default_cycle)
 
-    plot_series(all_df, args.outdir, args.title_prefix, exp_colors, exp_names_map, "lead_time", args.start_date, args.end_date)
-    plot_series(all_df, args.outdir, args.title_prefix, exp_colors, exp_names_map, "vt_hour", args.start_date, args.end_date)
+    plot_series(all_df, args.outdir, args.title_prefix, exp_colors, exp_names_map, "lead_time", start_date, end_date)
+    plot_series(all_df, args.outdir, args.title_prefix, exp_colors, exp_names_map, "vt_hour", start_date, end_date)
 
 if __name__ == "__main__":
     main()

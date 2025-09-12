@@ -1,6 +1,6 @@
-// verify_cpp_parallel.cpp (Version 12 - Added VT Hour for Scorecard Compatibility)
-// - ADDED: ResultKey and TempResultKey now include vt_hour for compatibility with the scorecard tool.
-// - MODIFIED: Output CSV files surface_metrics.csv and temp_metrics.csv now include vt_hour column.
+// verify_cpp_parallel.cpp (Version 13 - Fixed Date-Time Arithmetic and CSV Output)
+// - MODIFIED: Fixed date-time arithmetic to avoid DST issues (removed mktime/localtime dependencies).
+// - MODIFIED: CSV output now truncates existing files to avoid appending to old data.
 // - No other logical changes were made.
 
 #include <iostream>
@@ -78,29 +78,43 @@ struct AggregatedStats {
     long count = 0;
 };
 
-// --- Helper Function for Date-Time Arithmetic ---
+// --- Helper Function for Date-Time Arithmetic (REPLACED: remove mktime/localtime DST issues) ---
+static inline bool is_leap(int y){
+    return ( (y%4==0 && y%100!=0) || (y%400==0) );
+}
+static inline int days_in_month(int y,int m){
+    static const int md[12]={31,28,31,30,31,30,31,31,30,31,30,31};
+    if(m==2) return md[1] + (is_leap(y)?1:0);
+    return md[m-1];
+}
 long long add_hours_to_yyyymmddhh(long long start_time, int hours_to_add) {
-    long long year = start_time / 1000000;
-    long long month = (start_time / 10000) % 100;
-    long long day = (start_time / 100) % 100;
-    long long hour = start_time % 100;
+    int year  = (int)(start_time / 1000000LL);
+    int month = (int)((start_time / 10000LL) % 100LL);
+    int day   = (int)((start_time / 100LL) % 100LL);
+    int hour  = (int)(start_time % 100LL);
 
-    std::tm time_info = {};
-    time_info.tm_year = year - 1900;
-    time_info.tm_mon = month - 1;
-    time_info.tm_mday = day;
-    time_info.tm_hour = hour + hours_to_add; // Add lead time
+    long long total_hours = (long long)hour + hours_to_add;
 
-    // mktime normalizes the date and time, handling day/month/year rollovers
-    std::time_t time_normalized = std::mktime(&time_info);
-    
-    // Convert back to the YYYYMMDDHH format
-    std::tm* final_time_info = std::localtime(&time_normalized);
-    long long final_time = (final_time_info->tm_year + 1900LL) * 1000000LL +
-                           (final_time_info->tm_mon + 1LL) * 10000LL +
-                           (final_time_info->tm_mday) * 100LL +
-                           (final_time_info->tm_hour);
-    return final_time;
+    while (total_hours >= 24) {
+        total_hours -= 24;
+        day++;
+        int dim = days_in_month(year, month);
+        if (day > dim) {
+            day = 1;
+            month++;
+            if (month > 12) { month = 1; year++; }
+        }
+    }
+    while (total_hours < 0) {
+        total_hours += 24;
+        day--;
+        if (day < 1) {
+            month--;
+            if (month < 1) { month = 12; year--; }
+            day = days_in_month(year, month);
+        }
+    }
+    return (long long)year * 1000000LL + (long long)month * 10000LL + (long long)day * 100LL + total_hours;
 }
 
 // --- Core Functions ---
@@ -180,25 +194,30 @@ void read_data_file(const std::string& filepath, bool is_vfld, int& version_flag
 }
 
 FileInfo parse_filename(const std::string& path) {
-    std::string basename = fs::path(path).filename().string(); FileInfo info; info.path = path;
+    std::string basename = fs::path(path).filename().string();
+    FileInfo info; info.path = path;
+    // Accept ONLY vfld files ending with 12 digits: YYYYMMDDHHLL (base + 2-digit lead)
     if (basename.rfind("vfld", 0) == 0) {
-        std::regex rgx("vfld.*?(20\\d{8})(\\d{2})?$"); std::smatch match;
-        if (std::regex_search(basename, match, rgx)) {
-            info.type = "vfld"; info.base_time = std::stoll(match[1].str());
-            if (match.size() > 2 && match[2].matched) {
-                info.lead_time = std::stoi(match[2].str());
-                // Use the helper function for correct date-time addition
-                info.valid_time = add_hours_to_yyyymmddhh(info.base_time, info.lead_time);
-            } else {
-                info.lead_time = -1;
-                info.valid_time = info.base_time;
-            }
+        std::smatch m;
+        std::regex re("(20\\d{6})(\\d{2})(\\d{2})$"); // (YYYYMMDD)(HH)(LL)
+        if (std::regex_search(basename, m, re)) {
+            info.type = "vfld";
+            std::string date_part = m[1].str();
+            std::string hour_part = m[2].str();
+            std::string lead_part = m[3].str();
+            info.base_time = std::stoll(date_part + hour_part); // YYYYMMDDHH
+            info.lead_time = std::stoi(lead_part);
+            info.valid_time = add_hours_to_yyyymmddhh(info.base_time, info.lead_time);
         }
     } else if (basename.rfind("vobs", 0) == 0) {
-        std::regex rgx("vobs(20\\d{8})$"); std::smatch match;
-        if (std::regex_search(basename, match, rgx)) {
-            info.type = "vobs"; info.valid_time = std::stoll(match[1].str());
-            info.base_time = info.valid_time; info.experiment = "observation";
+        std::smatch m;
+        std::regex re("(20\\d{6})(\\d{2})$"); // YYYYMMDDHH
+        if (std::regex_search(basename, m, re)) {
+            info.type = "vobs";
+            info.base_time = std::stoll(m[1].str() + m[2].str());
+            info.valid_time = info.base_time;
+            info.experiment = "observation";
+            info.lead_time = -1;
         }
     }
     return info;
@@ -387,8 +406,12 @@ int main(int argc, char* argv[]) {
     std::chrono::duration<double> verification_duration = verification_end_time - verification_start_time;
     std::cout << "--- Time for verification processing: " << verification_duration.count() << " seconds ---" << std::endl;
     
+    // Ensure old CSVs removed to avoid stale data
+    if (fs::exists("surface_metrics.csv")) fs::remove("surface_metrics.csv");
+    if (fs::exists("temp_metrics.csv")) fs::remove("temp_metrics.csv");
+
     std::cout << "Saving surface metrics to surface_metrics.csv" << std::endl;
-    std::ofstream outfile("surface_metrics.csv");
+    std::ofstream outfile("surface_metrics.csv", std::ios::trunc);
     outfile.precision(6);
     outfile << std::fixed << "experiment,lead_time,vt_hour,obstypevar,bias,rmse,n_samples\n";
     for(const auto& pair : final_surface_results) {
@@ -401,7 +424,7 @@ int main(int argc, char* argv[]) {
     outfile.close();
 
     std::cout << "Saving temp metrics to temp_metrics.csv" << std::endl;
-    std::ofstream temp_outfile("temp_metrics.csv");
+    std::ofstream temp_outfile("temp_metrics.csv", std::ios::trunc);
     temp_outfile.precision(6);
     temp_outfile << std::fixed << "experiment,lead_time,vt_hour,pressure_level,obstypevar,bias,rmse,n_samples\n";
     for(const auto& pair : final_temp_results) {

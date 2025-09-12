@@ -139,8 +139,6 @@ def main() -> None:
                         help="Experiment color mapping EXP=COLOR (repeatable).")
     parser.add_argument("--exp-name", action="append",
                         help="Experiment name mapping LONG_NAME=SHORT_NAME (repeatable).")
-    parser.add_argument("--start-date", help="Start date for title.")
-    parser.add_argument("--end-date", help="End date for title.")
     args = parser.parse_args()
     os.makedirs(args.outdir, exist_ok=True)
 
@@ -154,6 +152,9 @@ def main() -> None:
     if df.is_empty():
         print("Empty metrics file; aborting.")
         return
+
+    start_date = df["vt_hour"].min()
+    end_date = df["vt_hour"].max()
 
     exp_names_map: Dict[str, str] = {}
     if args.exp_name:
@@ -178,9 +179,9 @@ def main() -> None:
         if e not in exp_colors:
             exp_colors[e] = next(default_cycle)
 
-    plot_temp_profiles(df, args.outdir, exp_colors, exp_names_map, args.start_date, args.end_date)
-    plot_series(df, args.outdir, exp_colors, exp_names_map, "lead_time", args.start_date, args.end_date)
-    plot_series(df, args.outdir, exp_colors, exp_names_map, "vt_hour", args.start_date, args.end_date)
+    plot_temp_profiles(df, args.outdir, exp_colors, exp_names_map, start_date, end_date)
+    plot_series(df, args.outdir, exp_colors, exp_names_map, "lead_time", start_date, end_date)
+    plot_series(df, args.outdir, exp_colors, exp_names_map, "vt_hour", start_date, end_date)
 
 if __name__ == "__main__":
     main()

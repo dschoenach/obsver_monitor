@@ -78,9 +78,7 @@ if [[ -f "$METRICS_FILE" ]]; then
     --exp-b-name "$EXP2_NAME" \
     --metrics "$METRICS_FILE" \
     --outdir "$PLOTS" \
-    --title "${PROJECTNAME}_surface" \
-    --start-date "$START" \
-    --end-date "$END" &
+    --title "${PROJECTNAME}_surface"
 else
   echo "WARNING: ${METRICS_FILE} not found. Skipping scorecard."
 fi
@@ -95,9 +93,7 @@ if [[ -f "$TEMP_METRICS_FILE" ]]; then
     --exp-b-name "$EXP2_NAME" \
     --metrics "$TEMP_METRICS_FILE" \
     --outdir "$PLOTS" \
-    --title "${PROJECTNAME}_temp" \
-    --start-date "$START" \
-    --end-date "$END" &
+    --title "${PROJECTNAME}_temp"
 else
   echo "WARNING: ${TEMP_METRICS_FILE} not found. Skipping temp scorecard."
 fi
@@ -122,10 +118,8 @@ if [[ -f "$METRICS_FILE" ]]; then
     --metrics "$METRICS_FILE" \
     --outdir "$PLOTS" \
     --title-prefix "${PROJECTNAME}_surface" \
-    --start-date "$START" \
-    --end-date "$END" \
     "${COLOR_ARGS[@]}" \
-    "${NAME_ARGS[@]}" &
+    "${NAME_ARGS[@]}" 
 else
   echo "WARNING: ${METRICS_FILE} not found. Skipping surface metric plots."
 fi
@@ -149,10 +143,8 @@ if [[ -f "$TEMP_METRICS_FILE" ]]; then
   python3 -m src.monitor_profile_plotting \
     --metrics "$TEMP_METRICS_FILE" \
     --outdir "$PLOTS" \
-    --start-date "$START" \
-    --end-date "$END" \
     "${COLOR_ARGS[@]}" \
-    "${NAME_ARGS[@]}" &
+    "${NAME_ARGS[@]}" 
 else
   echo "WARNING: ${TEMP_METRICS_FILE} not found. Skipping temp profile plots."
 fi

@@ -181,9 +181,7 @@ if [[ ${#METRICS_FILES[@]} -gt 0 ]]; then
     --exp-b-name "${EXP_NAMES[1]}" \
     --metrics "${METRICS_FILES[@]}" \
     --outdir "${PLOTS}" \
-    --title "Scorecard" \
-    --start-date "$START" \
-    --end-date "$END"
+    --title "Scorecard"
 else
   echo "No metric files found for listed variables; skipping scorecard."
 fi

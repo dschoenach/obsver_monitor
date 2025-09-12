@@ -262,6 +262,9 @@ def main() -> None:
     if args.lead_time is not None:
         all_df = all_df.filter(pl.col("lead_time") == args.lead_time)
 
+    start_date = all_df["vt_hour"].min()
+    end_date = all_df["vt_hour"].max()
+
     exp_names_map: Dict[str, str] = {}
     if args.exp_name:
         for spec in args.exp_name:
@@ -291,10 +294,10 @@ def main() -> None:
     lead_time_str = f"_lt_{args.lead_time}" if args.lead_time is not None else ""
 
     if "channel" in all_df.columns:
-        plot_combined_tb_profiles(all_df, args.outdir, args.title_prefix, exp_colors, exp_names_map, lead_time_str, args.start_date, args.end_date)
+        plot_combined_tb_profiles(all_df, args.outdir, args.title_prefix, exp_colors, exp_names_map, lead_time_str, start_date, end_date)
     else:
-        plot_combined_profiles(all_df, args.outdir, args.title_prefix, exp_colors, exp_names_map, lead_time_str, args.start_date, args.end_date)
-    plot_combined_timeseries(all_df, args.outdir, args.title_prefix, exp_colors, exp_names_map, lead_time_str, args.start_date, args.end_date)
+        plot_combined_profiles(all_df, args.outdir, args.title_prefix, exp_colors, exp_names_map, lead_time_str, start_date, end_date)
+    plot_combined_timeseries(all_df, args.outdir, args.title_prefix, exp_colors, exp_names_map, lead_time_str, start_date, end_date)
 
 if __name__ == "__main__":
     main()

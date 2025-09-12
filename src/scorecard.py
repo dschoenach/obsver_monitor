@@ -232,8 +232,6 @@ def main():
                         help="Metrics parquet files or directories (auto-glob *_metrics.parquet).")
     parser.add_argument("--outdir", required=True, help="Directory to save plots.")
     parser.add_argument("--title", required=True, help="Scorecard title.")
-    parser.add_argument("--start-date", help="Start date for title.")
-    parser.add_argument("--end-date", help="End date for title.")
     args = parser.parse_args()
 
     exp_names = [args.exp_a, args.exp_b]
@@ -272,7 +270,11 @@ def main():
         return
 
     all_df = pl.concat(dfs, how="vertical_relaxed")
-    plot_scorecard(all_df, args.outdir, args.title, exp_names, display_names, args.start_date, args.end_date)
+
+    start_date = all_df["vt_hour"].min()
+    end_date = all_df["vt_hour"].max()
+
+    plot_scorecard(all_df, args.outdir, args.title, exp_names, display_names, start_date, end_date)
     
     # REMOVED the incorrect SQLite logic from here
 
