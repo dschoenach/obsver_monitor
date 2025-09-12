@@ -2,7 +2,6 @@
 header('Content-Type: application/json');
 
 // The root directory where project data is stored.
-// It's assumed that this path is relative to the api.php file.
 $data_root = './out/unified_verification/';
 
 $action = $_GET['action'] ?? 'get_projects';
@@ -25,23 +24,32 @@ if ($action === 'get_projects') {
 
         $response[$project] = [];
 
-        // Find plots in subdirectories (e.g., obsver/plots/atms_tb/*.png or monitor/plots/DD/*.png)
-        $subdirs = glob($plots_dir . '*_*', GLOB_ONLYDIR); // Look for dirs with underscore, typical for variables
-        if (empty($subdirs)) { // Fallback for monitor-style dirs (DD, FF)
-            $subdirs = glob($plots_dir . '*', GLOB_ONLYDIR);
-        }
+        // Scan all subdirectories for plots
+        $subdirs = glob($plots_dir . '*', GLOB_ONLYDIR);
 
         foreach ($subdirs as $subdir) {
             $var_name = basename($subdir);
-            if ($var_name === 'files') continue; // Skip generic 'files' dir
+            if ($var_name === 'files') continue;
 
-            $response[$project][$var_name] = [];
+            if (!isset($response[$project][$var_name])) {
+                $response[$project][$var_name] = [];
+            }
+
             foreach (glob($subdir . '/*.png') as $file) {
                 $plot_type = basename($file, '.png');
-                // Clean up plot type name for display
-                $plot_type = str_replace($var_name . '_', '', $plot_type);
-                $plot_type = str_replace('combined_', '', $plot_type);
-                $response[$project][$var_name][$plot_type] = $file;
+                
+                // More robust plot type cleaning
+                $cleaned_plot_type = $plot_type;
+                if (strpos($cleaned_plot_type, $var_name . '_') === 0) {
+                    $cleaned_plot_type = substr($cleaned_plot_type, strlen($var_name) + 1);
+                } else {
+                    // Handle cases like temp_TT_profile where var_name is temp_TT
+                    $cleaned_plot_type = str_replace($var_name, '', $cleaned_plot_type);
+                    $cleaned_plot_type = ltrim($cleaned_plot_type, '_');
+                }
+                $cleaned_plot_type = str_replace('combined_', '', $cleaned_plot_type);
+
+                $response[$project][$var_name][$cleaned_plot_type] = $file;
             }
         }
 

@@ -31,8 +31,12 @@ struct SurfaceStation {
 struct TempLevel {
     int station_id = -1;
     double pressure = -999.0;
-    double temp = -999.0;
-    double rh = -999.0;
+    double temp = -999.0;   // TT
+    double fi   = -999.0;   // FI (geopotential / height)
+    double rh   = -999.0;   // RH
+    double qq   = -999.0;   // Specific humidity
+    double dd   = -999.0;   // Wind direction
+    double ff   = -999.0;   // Wind speed
 };
 struct VobsData {
     std::unordered_map<int, SurfaceStation> stations;
@@ -160,7 +164,11 @@ void read_data_file(const std::string& filepath, bool is_vfld, int& version_flag
                     TempLevel tl; tl.station_id = station_id;
                     if(temp_col_map.count("PP")&&temp_col_map.at("PP")<values.size())tl.pressure=values[temp_col_map.at("PP")];
                     if(temp_col_map.count("TT")&&temp_col_map.at("TT")<values.size())tl.temp=values[temp_col_map.at("TT")];
+                    if(temp_col_map.count("FI")&&temp_col_map.at("FI")<values.size())tl.fi=values[temp_col_map.at("FI")];
                     if(temp_col_map.count("RH")&&temp_col_map.at("RH")<values.size())tl.rh=values[temp_col_map.at("RH")];
+                    if(temp_col_map.count("QQ")&&temp_col_map.at("QQ")<values.size())tl.qq=values[temp_col_map.at("QQ")];
+                    if(temp_col_map.count("DD")&&temp_col_map.at("DD")<values.size())tl.dd=values[temp_col_map.at("DD")];
+                    if(temp_col_map.count("FF")&&temp_col_map.at("FF")<values.size())tl.ff=values[temp_col_map.at("FF")];
                     temp_levels.push_back(tl);
                 }
             }
@@ -277,8 +285,8 @@ int main(int argc, char* argv[]) {
     std::map<ResultKey, AggregatedStats> final_surface_results;
     std::map<TempResultKey, AggregatedStats> final_temp_results;
 
-    const std::vector<std::string> supported_variables = {"NN","DD","FF","TT","RH","PS","PE","QQ","VI","TD","TX","TN","GG","GX","FX"};
-
+    const std::vector<std::string> supported_variables = {"NN","DD","FF","TT","RH","PS","PE","QQ","VI","TD","TX","TN","GG","GX","FX","FI"};
+    
     #pragma omp parallel
     {
         std::map<ResultKey, AggregatedStats> local_surface_results;
@@ -321,22 +329,50 @@ int main(int argc, char* argv[]) {
                 }
             }
             if (!vfld_temp_levels_vec.empty() && !vobs_temp_levels.empty()) {
+
+                // Optional (small) optimization: build a lookup map for vobs by (station_id, pressure)
+                std::unordered_multimap<long long, const TempLevel*> vobs_index;
+                vobs_index.reserve(vobs_temp_levels.size()*2);
+                auto mk_key = [](int sid, double pres){
+                    // Combine into 64-bit key (pressure * 100 to avoid FP noise; assumes pressure < 1,000,000 hPa)
+                    long long p = static_cast<long long>(std::llround(pres * 100.0));
+                    return ( (static_cast<long long>(sid) << 32) ^ p );
+                };
+                for (const auto& lvl : vobs_temp_levels) {
+                    vobs_index.emplace(mk_key(lvl.station_id, lvl.pressure), &lvl);
+                }
+
+                auto process_temp_var = [&](const std::string& var_name, double vfld_val, double vobs_val, double pressure){
+                    if (vfld_val > -98.0 && vobs_val > -98.0) {
+                        double error = vfld_val - vobs_val;
+                        TempResultKey key = {vfld_info.experiment, vfld_info.lead_time, var_name, pressure, vfld_info.valid_time};
+                        auto& bucket = local_temp_results[key];
+                        bucket.sum_of_errors += error;
+                        bucket.sum_of_squared_errors += error * error;
+                        bucket.count++;
+                    }
+                };
+
                 for(const auto& tl_vfld : vfld_temp_levels_vec) {
-                    for(const auto& tl_vobs : vobs_temp_levels) {
-                        if (tl_vfld.station_id == tl_vobs.station_id && std::abs(tl_vfld.pressure - tl_vobs.pressure) < 1e-5) {
-                            long long vt_hour = vfld_info.valid_time; // Use full valid time
-                            if (tl_vfld.temp > -98.0 && tl_vobs.temp > -98.0) {
-                                double error = tl_vfld.temp - tl_vobs.temp;
-                                TempResultKey key = {vfld_info.experiment, vfld_info.lead_time, "TT", tl_vfld.pressure, vt_hour};
-                                local_temp_results[key].sum_of_errors += error; local_temp_results[key].sum_of_squared_errors += error*error; local_temp_results[key].count++;
-                            }
-                            if (tl_vfld.rh > -98.0 && tl_vobs.rh > -98.0) {
-                                double error = tl_vfld.rh - tl_vobs.rh;
-                                TempResultKey key = {vfld_info.experiment, vfld_info.lead_time, "RH", tl_vfld.pressure, vt_hour};
-                                local_temp_results[key].sum_of_errors += error; local_temp_results[key].sum_of_squared_errors += error*error; local_temp_results[key].count++;
-                            }
-                            break;
-                        }
+                    long long key = mk_key(tl_vfld.station_id, tl_vfld.pressure);
+                    auto range = vobs_index.equal_range(key);
+                    for (auto it = range.first; it != range.second; ++it) {
+                        const TempLevel* tl_vobs = it->second;
+
+                        // TT
+                        process_temp_var("TT", tl_vfld.temp, tl_vobs->temp, tl_vfld.pressure);
+                        // RH
+                        process_temp_var("RH", tl_vfld.rh, tl_vobs->rh, tl_vfld.pressure);
+                        // FI
+                        process_temp_var("FI", tl_vfld.fi, tl_vobs->fi, tl_vfld.pressure);
+                        // QQ
+                        process_temp_var("QQ", tl_vfld.qq, tl_vobs->qq, tl_vfld.pressure);
+                        // DD
+                        process_temp_var("DD", tl_vfld.dd, tl_vobs->dd, tl_vfld.pressure);
+                        // FF
+                        process_temp_var("FF", tl_vfld.ff, tl_vobs->ff, tl_vfld.pressure);
+
+                        break; // Single match per (station,pressure)
                     }
                 }
             }

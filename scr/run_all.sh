@@ -25,7 +25,7 @@ export OBSVER_PATH_B="data/obsver/${MONITOR_EXP_B}"
 
 # --- Date/Time Configuration ---
 export START="2025070200"
-export END="2025070321" #80121"
+export END="2025080121"
 export FCINT=12
 
 # --- Obsver Specific Configuration ---

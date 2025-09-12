@@ -9,6 +9,7 @@ EXP2="${MONITOR_EXP_B:-meps2_preop_rednmc06_t2h2mbr000}"
 START="${START:-2025070200}"
 END="${END:-2025073121}"
 FCINT="${FCINT:-12}"
+EXP_COLORS_STR="${EXP_COLORS:-#1f77b4 #d62728}"
 
 # Define paths
 RBASE=$(pwd)
@@ -17,6 +18,8 @@ WORKDIR="${BASE_OUTDIR}/work"
 PLOTS="${BASE_OUTDIR}/plots"
 VFLD_ROOT="$RBASE/data/monitor/vfld"
 VOBS_ROOT="$RBASE/data/monitor/vobs"
+METRICS_FILE="${WORKDIR}/surface_metrics.parquet"
+TEMP_METRICS_FILE="${WORKDIR}/temp_metrics.parquet"
 
 # --- Setup ---
 echo "Running Monitor Verification"
@@ -45,41 +48,22 @@ chmod +x verify_cpp_parallel
   "$(readlink -f ${VFLD_ROOT}/${EXP2})"
 
 cd "$RBASE"
-
-# Convert CSV output to Parquet for the scorecard script
-METRICS_CSV="${WORKDIR}/surface_metrics.csv"
-if [[ -f "$METRICS_CSV" ]]; then
-    echo "Converting CSV metrics to Parquet..."
-    python3 -c "import polars as pl; pl.read_csv('${METRICS_CSV}').write_parquet('${WORKDIR}/surface_metrics.parquet')"
+# Convert CSV output to Parquet
+if [[ -f "${WORKDIR}/surface_metrics.csv" ]]; then
+    echo "Converting surface CSV metrics to Parquet..."
+    python3 -c "import polars as pl; pl.read_csv('${WORKDIR}/surface_metrics.csv').write_parquet('${METRICS_FILE}')"
 else
     echo "WARNING: C++ verification did not produce surface_metrics.csv"
 fi
-
-EXP_COLORS_STR="${EXP_COLORS:-#1f77b4 #d62728}"
-
-# --- Run Scorecard for Surface Metrics ---
-METRICS_FILE="${WORKDIR}/surface_metrics.parquet"
-if [[ -f "$METRICS_FILE" ]]; then
-    echo "Building timeseries and lead time plots for monitor surface metrics..."
-    EXPS=("$EXP1" "$EXP2")
-    read -r -a EXP_COLORS <<< "$EXP_COLORS_STR"
-
-    COLOR_ARGS=()
-    for i in "${!EXPS[@]}"; do
-      if [[ -n "${EXP_COLORS[$i]:-}" ]]; then
-        COLOR_ARGS+=(--exp-color "${EXPS[$i]}"="${EXP_COLORS[$i]}")
-      fi
-    done
-
-    python3 -m src.monitor_plotting \
-      --metrics "$METRICS_FILE" \
-      --outdir "$PLOTS" \
-      --title-prefix "${PROJECTNAME}_surface" \
-      "${COLOR_ARGS[@]}"
+if [[ -f "${WORKDIR}/temp_metrics.csv" ]]; then
+    echo "Converting temp CSV metrics to Parquet..."
+    python3 -c "import polars as pl; pl.read_csv('${WORKDIR}/temp_metrics.csv').write_parquet('${TEMP_METRICS_FILE}')"
 else
-  echo "WARNING: ${METRICS_FILE} not found. Skipping timeseries and lead time plots."
+    echo "WARNING: C++ verification did not produce temp_metrics.csv"
 fi
 
+
+# --- Run Scorecard for Surface Metrics ---
 if [[ -f "$METRICS_FILE" ]]; then
   echo "Building scorecard for monitor surface metrics..."
   python3 -m src.scorecard \
@@ -90,6 +74,49 @@ if [[ -f "$METRICS_FILE" ]]; then
     --title "${PROJECTNAME}_surface"
 else
   echo "WARNING: ${METRICS_FILE} not found. Skipping scorecard."
+fi
+
+# --- Run Plotting for Surface Metrics ---
+if [[ -f "$METRICS_FILE" ]]; then
+  echo "Building timeseries and lead time plots for monitor surface metrics..."
+  EXPS=("$EXP1" "$EXP2")
+  read -r -a EXP_COLORS <<< "$EXP_COLORS_STR"
+
+  COLOR_ARGS=()
+  for i in "${!EXPS[@]}"; do
+    if [[ -n "${EXP_COLORS[$i]:-}" ]]; then
+      COLOR_ARGS+=(--exp-color "${EXPS[$i]}"="${EXP_COLORS[$i]}")
+    fi
+  done
+
+  python3 -m src.monitor_plotting \
+    --metrics "$METRICS_FILE" \
+    --outdir "$PLOTS" \
+    --title-prefix "${PROJECTNAME}_surface" \
+    "${COLOR_ARGS[@]}"
+else
+  echo "WARNING: ${METRICS_FILE} not found. Skipping surface metric plots."
+fi
+
+# --- Run Plotting for Temp Profiles ---
+if [[ -f "$TEMP_METRICS_FILE" ]]; then
+  echo "Building temp profile plots for monitor..."
+  EXPS=("$EXP1" "$EXP2")
+  read -r -a EXP_COLORS <<< "$EXP_COLORS_STR"
+
+  COLOR_ARGS=()
+  for i in "${!EXPS[@]}"; do
+    if [[ -n "${EXP_COLORS[$i]:-}" ]]; then
+      COLOR_ARGS+=(--exp-color "${EXPS[$i]}"="${EXP_COLORS[$i]}")
+    fi
+  done
+
+  python3 -m src.monitor_profile_plotting \
+    --metrics "$TEMP_METRICS_FILE" \
+    --outdir "$PLOTS" \
+    "${COLOR_ARGS[@]}"
+else
+  echo "WARNING: ${TEMP_METRICS_FILE} not found. Skipping temp profile plots."
 fi
 
 echo "Monitor Verification Complete."
