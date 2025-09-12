@@ -70,7 +70,7 @@ def plot_temp_profiles(df: pl.DataFrame, outdir: str, exp_colors: Dict[str, str]
         ax.set_yticks(counts["pressure_level"].to_list())
         ax.invert_yaxis()
         ax.grid(True, which="both", linestyle="--", linewidth=0.5, alpha=0.7)
-        ax.legend(handles=line_handles, loc="upper right", framealpha=0.85, ncol=1)
+        ax.legend(handles=line_handles, loc="upper right", framealpha=0.85, ncol=1, frameon=False)
         fig.tight_layout()
 
         plot_dir = os.path.join(outdir, f"temp_{var}")
@@ -132,7 +132,7 @@ def plot_series(df: pl.DataFrame, outdir: str, exp_colors: Dict[str, str], x_axi
         ax.set_ylabel("Value")
         ax.tick_params(axis='x', rotation=45)
         ax.grid(True, linestyle="--", linewidth=0.5, alpha=0.7)
-        ax.legend(handles=line_handles, loc="upper right", framealpha=0.85)
+        ax.legend(handles=line_handles, loc="upper right", framealpha=0.85, frameon=False)
         fig.tight_layout()
 
         plot_dir = os.path.join(outdir, f"temp_{var}")

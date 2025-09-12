@@ -37,9 +37,32 @@ $(document).ready(function() {
     function populateCategories(project) {
         const nav = $('#category-nav');
         nav.empty().append('<h2>Categories</h2>');
-        // Define static categories
-        const categories = ['Synop_Surface', 'Temp_Profiles', 'Scorecards']; 
-        categories.forEach(c => {
+        const allVars = projectData[project] || {};
+        let categories = new Set();
+
+        // Dynamically determine categories based on variable names and special cases
+        Object.keys(allVars).forEach(v => {
+            if (v === 'Scorecards') {
+                categories.add('Scorecards');
+            } else if (v.toLowerCase().includes('profile')) {
+                categories.add('Profiles');
+            } else if (v.toLowerCase().includes('timeseries')) {
+                categories.add('Timeseries');
+            } else if (v.toLowerCase().includes('temp')) {
+                categories.add('Temp_Profiles');
+            } else {
+                categories.add(project === 'obsver' ? 'Plots' : 'Synop_Surface');
+            }
+        });
+
+        // Ensure Scorecards is last if it exists
+        const sortedCategories = Array.from(categories).sort((a, b) => {
+            if (a === 'Scorecards') return 1;
+            if (b === 'Scorecards') return -1;
+            return a.localeCompare(b);
+        });
+
+        sortedCategories.forEach(c => {
             nav.append(`<a href="#" data-category="${c}">${c}</a>`);
         });
     }
@@ -54,8 +77,17 @@ $(document).ready(function() {
             if (allVars['Scorecards']) {
                 relevantVars = ['Scorecards'];
             }
-        } else if (category === 'Synop_Surface') {
-            relevantVars = Object.keys(allVars).filter(v => v !== 'Scorecards' && !v.toLowerCase().includes('temp'));
+        } else if (category === 'Profiles') {
+            relevantVars = Object.keys(allVars).filter(v => v.toLowerCase().includes('profile'));
+        } else if (category === 'Timeseries') {
+            relevantVars = Object.keys(allVars).filter(v => v.toLowerCase().includes('timeseries'));
+        } else if (category === 'Synop_Surface' || category === 'Plots') {
+            relevantVars = Object.keys(allVars).filter(v => 
+                v !== 'Scorecards' && 
+                !v.toLowerCase().includes('temp') &&
+                !v.toLowerCase().includes('profile') &&
+                !v.toLowerCase().includes('timeseries')
+            );
         } else if (category === 'Temp_Profiles') {
             relevantVars = Object.keys(allVars).filter(v => v.toLowerCase().includes('temp'));
         }
@@ -129,10 +161,25 @@ $(document).ready(function() {
 
         // Display plot if everything is selected
         if (activeSelections.project && activeSelections.variable && activeSelections.plotType) {
-            const imagePath = projectData[activeSelections.project][activeSelections.variable][activeSelections.plotType];
-            $('#plot-display').attr('src', imagePath).show();
+            // Special handling for Scorecards which might not have a plotType but should show an image
+            if (activeSelections.category === 'Scorecards' && activeSelections.variable === 'Scorecards') {
+                 const scorecardPlots = projectData[activeSelections.project]['Scorecards'];
+                 const imagePath = scorecardPlots[activeSelections.plotType];
+                 $('#plot-display').attr('src', imagePath).show();
+                 $('#scorecard-table-container').show();
+                 $('#scorecard-title').show();
+            } else {
+                const imagePath = projectData[activeSelections.project][activeSelections.variable][activeSelections.plotType];
+                $('#plot-display').attr('src', imagePath).show();
+                // Hide scorecard table if not in scorecard category
+                $('#scorecard-table-container').hide();
+                $('#scorecard-title').hide();
+            }
         } else {
             $('#plot-display').attr('src', '').hide();
+             // Also hide scorecard table if not fully selected
+            $('#scorecard-table-container').hide();
+            $('#scorecard-title').hide();
         }
     }
     

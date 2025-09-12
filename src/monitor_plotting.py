@@ -89,7 +89,7 @@ def plot_series(df: pl.DataFrame, outdir: str, title_prefix: str, exp_colors: Di
         ax.set_ylabel("Value")
         ax.tick_params(axis='x', rotation=45)
         ax.grid(True, linestyle="--", linewidth=0.5, alpha=0.7)
-        ax.legend(handles=line_handles, loc="upper right", framealpha=0.85)
+        ax.legend(handles=line_handles, loc="upper right", framealpha=0.85, frameon=False)
         fig.tight_layout()
 
         plot_dir = os.path.join(outdir, ov)
