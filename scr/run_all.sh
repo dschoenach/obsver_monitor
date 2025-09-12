@@ -3,7 +3,7 @@ set -e
 
 # --- Master Configuration ---
 # All results will go into this single directory
-export MASTER_OUTPUT="out/unified_verification"
+export MASTER_OUTPUT="webapp/out/unified_verification"
 
 # --- Experiment Configuration ---
 # Base names for experiments
@@ -25,12 +25,12 @@ export OBSVER_PATH_B="data/obsver/${MONITOR_EXP_B}"
 
 # --- Date/Time Configuration ---
 export START="2025070200"
-export END="2025080121"
+export END="2025070321" #80121"
 export FCINT=12
 
 # --- Obsver Specific Configuration ---
 export OBSVARS="atms_tb" # "amsua_tb" "mhs_tb" etc.
-export USE_COMMON_KEYS=0
+export USE_COMMON_KEYS=1
 export ROUND_DEC=2
 export EXP_COLORS="#1f77b4 #d62728"
 export GENERATE_LEADTIME_PLOTS=0 # Set to 0 to disable per-lead-time plots in obsver
