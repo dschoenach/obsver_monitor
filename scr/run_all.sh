@@ -9,6 +9,8 @@ export MASTER_OUTPUT="webapp/out/unified_verification"
 # Base names for experiments
 export EXP_A_BASE="meps2_preop_rednmc06"
 export EXP_B_BASE="meps2_preop_rednmc06_t2h2"
+export EXP_A_NAME="REF"
+export EXP_B_NAME="t2h2"
 
 # Names for Obsver (used in file names and python scripts)
 export OBSVER_EXP_A="${EXP_A_BASE}"

@@ -8,7 +8,7 @@ import matplotlib.pyplot as plt
 import matplotlib.patches as patches
 from sklearn.preprocessing import minmax_scale
 
-def plot_scorecard(df: pl.DataFrame, outdir: str, title: str, exp_names: list[str]) -> None:
+def plot_scorecard(df: pl.DataFrame, outdir: str, title: str, exp_names: list[str], display_names: list[str], start_date: str, end_date: str) -> None:
     if len(exp_names) != 2:
         print("Need exactly two experiments.")
         return
@@ -179,7 +179,10 @@ def plot_scorecard(df: pl.DataFrame, outdir: str, title: str, exp_names: list[st
     ax.set_xticks(sorted(df_plot['lead_time'].unique()))
     ax.set_xlabel('Lead Time (hours/days)', fontsize=12)
     ax.set_ylabel('Variable', fontsize=12)
-    ax.set_title(f'{title}: {exp_names[0]} vs {exp_names[1]}', fontsize=16, pad=20)
+    full_title = f'{title}: {display_names[0]} vs {display_names[1]}'
+    if start_date and end_date:
+        full_title += f"\n{start_date} - {end_date}"
+    ax.set_title(full_title, fontsize=16, pad=20)
     ax.spines['top'].set_visible(False)
     ax.spines['right'].set_visible(False)
     ax.tick_params(axis='both', which='both', length=0)
@@ -192,7 +195,7 @@ def plot_scorecard(df: pl.DataFrame, outdir: str, title: str, exp_names: list[st
         patches.Patch(facecolor='#b2182b', edgecolor='none', alpha=0.2, label='Negative (Not Significant)'),
         patches.Patch(facecolor='#b2182b', edgecolor='black', alpha=0.8, label='Negative (Significant)', linewidth=1.5)
     ]
-    ax.legend(handles=legend_elements, loc='center left', bbox_to_anchor=(1, 0.5), title="Legend")
+    ax.legend(handles=legend_elements, loc='center left', bbox_to_anchor=(1, 0.5), title=f'{display_names[1]} better than {display_names[0]}')
 
     os.makedirs(outdir, exist_ok=True)
     out_path = os.path.join(outdir, f"{title}_scorecard.png")
@@ -223,13 +226,18 @@ def main():
     parser = argparse.ArgumentParser(description="Generate scorecard plots.")
     parser.add_argument("--exp-a", required=True)
     parser.add_argument("--exp-b", required=True)
+    parser.add_argument("--exp-a-name", help="Short name for experiment A for display.")
+    parser.add_argument("--exp-b-name", help="Short name for experiment B for display.")
     parser.add_argument("--metrics", nargs="+", required=True,
                         help="Metrics parquet files or directories (auto-glob *_metrics.parquet).")
     parser.add_argument("--outdir", required=True, help="Directory to save plots.")
     parser.add_argument("--title", required=True, help="Scorecard title.")
+    parser.add_argument("--start-date", help="Start date for title.")
+    parser.add_argument("--end-date", help="End date for title.")
     args = parser.parse_args()
 
     exp_names = [args.exp_a, args.exp_b]
+    display_names = [args.exp_a_name or args.exp_a, args.exp_b_name or args.exp_b]
 
     metric_files = _expand_metrics(args.metrics)
     if not metric_files:
@@ -264,7 +272,7 @@ def main():
         return
 
     all_df = pl.concat(dfs, how="vertical_relaxed")
-    plot_scorecard(all_df, args.outdir, args.title, exp_names)
+    plot_scorecard(all_df, args.outdir, args.title, exp_names, display_names, args.start_date, args.end_date)
     
     # REMOVED the incorrect SQLite logic from here
 

@@ -11,6 +11,10 @@ END="${END:-2025073121}"
 FCINT="${FCINT:-12}"
 EXP_COLORS_STR="${EXP_COLORS:-#1f77b4 #d62728}"
 
+# Short names for experiments
+EXP1_NAME="${EXP_A_NAME:-$EXP1}"
+EXP2_NAME="${EXP_B_NAME:-$EXP2}"
+
 # Define paths
 RBASE=$(pwd)
 PROJECTNAME="monitor"
@@ -24,6 +28,7 @@ TEMP_METRICS_FILE="${WORKDIR}/temp_metrics.parquet"
 # --- Setup ---
 echo "Running Monitor Verification"
 echo "Experiments: $EXP1, $EXP2"
+echo "Display Names: $EXP1_NAME, $EXP2_NAME"
 echo "Output: ${BASE_OUTDIR}"
 echo "--------------------------------------------------"
 mkdir -p "$WORKDIR" "$PLOTS"
@@ -69,9 +74,13 @@ if [[ -f "$METRICS_FILE" ]]; then
   python3 -m src.scorecard \
     --exp-a "$EXP1" \
     --exp-b "$EXP2" \
+    --exp-a-name "$EXP1_NAME" \
+    --exp-b-name "$EXP2_NAME" \
     --metrics "$METRICS_FILE" \
     --outdir "$PLOTS" \
-    --title "${PROJECTNAME}_surface"
+    --title "${PROJECTNAME}_surface" \
+    --start-date "$START" \
+    --end-date "$END" &
 else
   echo "WARNING: ${METRICS_FILE} not found. Skipping scorecard."
 fi
@@ -82,9 +91,13 @@ if [[ -f "$TEMP_METRICS_FILE" ]]; then
   python3 -m src.scorecard \
     --exp-a "$EXP1" \
     --exp-b "$EXP2" \
+    --exp-a-name "$EXP1_NAME" \
+    --exp-b-name "$EXP2_NAME" \
     --metrics "$TEMP_METRICS_FILE" \
     --outdir "$PLOTS" \
-    --title "${PROJECTNAME}_temp"
+    --title "${PROJECTNAME}_temp" \
+    --start-date "$START" \
+    --end-date "$END" &
 else
   echo "WARNING: ${TEMP_METRICS_FILE} not found. Skipping temp scorecard."
 fi
@@ -92,21 +105,27 @@ fi
 # --- Run Plotting for Surface Metrics ---
 if [[ -f "$METRICS_FILE" ]]; then
   echo "Building timeseries and lead time plots for monitor surface metrics..."
-  EXPS=("$EXP1" "$EXP2")
+  EXPS=($EXP1 "$EXP2")
+  EXP_NAMES=($EXP1_NAME "$EXP2_NAME")
   read -r -a EXP_COLORS <<< "$EXP_COLORS_STR"
 
   COLOR_ARGS=()
+  NAME_ARGS=()
   for i in "${!EXPS[@]}"; do
     if [[ -n "${EXP_COLORS[$i]:-}" ]]; then
       COLOR_ARGS+=(--exp-color "${EXPS[$i]}"="${EXP_COLORS[$i]}")
     fi
+    NAME_ARGS+=(--exp-name "${EXPS[$i]}"="${EXP_NAMES[$i]}")
   done
 
   python3 -m src.monitor_plotting \
     --metrics "$METRICS_FILE" \
     --outdir "$PLOTS" \
     --title-prefix "${PROJECTNAME}_surface" \
-    "${COLOR_ARGS[@]}"
+    --start-date "$START" \
+    --end-date "$END" \
+    "${COLOR_ARGS[@]}" \
+    "${NAME_ARGS[@]}" &
 else
   echo "WARNING: ${METRICS_FILE} not found. Skipping surface metric plots."
 fi
@@ -114,22 +133,30 @@ fi
 # --- Run Plotting for Temp Profiles ---
 if [[ -f "$TEMP_METRICS_FILE" ]]; then
   echo "Building temp profile plots for monitor..."
-  EXPS=("$EXP1" "$EXP2")
+  EXPS=($EXP1 "$EXP2")
+  EXP_NAMES=($EXP1_NAME "$EXP2_NAME")
   read -r -a EXP_COLORS <<< "$EXP_COLORS_STR"
 
   COLOR_ARGS=()
+  NAME_ARGS=()
   for i in "${!EXPS[@]}"; do
     if [[ -n "${EXP_COLORS[$i]:-}" ]]; then
       COLOR_ARGS+=(--exp-color "${EXPS[$i]}"="${EXP_COLORS[$i]}")
     fi
+    NAME_ARGS+=(--exp-name "${EXPS[$i]}"="${EXP_NAMES[$i]}")
   done
 
   python3 -m src.monitor_profile_plotting \
     --metrics "$TEMP_METRICS_FILE" \
     --outdir "$PLOTS" \
-    "${COLOR_ARGS[@]}"
+    --start-date "$START" \
+    --end-date "$END" \
+    "${COLOR_ARGS[@]}" \
+    "${NAME_ARGS[@]}" &
 else
   echo "WARNING: ${TEMP_METRICS_FILE} not found. Skipping temp profile plots."
 fi
+
+wait
 
 echo "Monitor Verification Complete."

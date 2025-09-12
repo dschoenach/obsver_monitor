@@ -4,6 +4,7 @@ set -euo pipefail
 # --- Configuration ---
 # Use environment variables from master script, or provide defaults
 EXPS=("${OBSVER_EXP_A:-meps2_preop_rednmc06}" "${OBSVER_EXP_B:-meps2_preop_rednmc06_t2h2}")
+EXP_NAMES=("${EXP_A_NAME:-${EXPS[0]}}" "${EXP_B_NAME:-${EXPS[1]}}")
 EXPPATHS=("${OBSVER_PATH_A:-data/obsver/meps2_preop_rednmc06mbr000}" "${OBSVER_PATH_B:-data/obsver/meps2_preop_rednmc06_t2h2mbr000}")
 OBSVARS_STR="${OBSVARS:-atms_tb}"
 # No eval needed here, can be read directly into an array
@@ -25,6 +26,7 @@ PLOTS="${OUTDIR}/plots"
 mkdir -p "${OUTDIR}" "${PLOTS}"
 
 echo "Experiments: ${EXPS[*]}"
+echo "Display Names: ${EXP_NAMES[*]}"
 echo "Variables: ${OBSVARS[*]}"
 echo "Output: ${OUTDIR}"
 
@@ -100,10 +102,12 @@ for OV in "${OBSVARS[@]}"; do
   echo "Plotting combined profiles & timeseries for ${OBSTYPEVAR}"
 
   COLOR_ARGS=()
+  NAME_ARGS=()
   for i in "${!EXPS[@]}"; do
     if [[ -n "${EXP_COLORS[$i]:-}" ]]; then
       COLOR_ARGS+=(--exp-color "${EXPS[$i]}"="${EXP_COLORS[$i]}")
     fi
+    NAME_ARGS+=(--exp-name "${EXPS[$i]}"="${EXP_NAMES[$i]}")
   done
 
   # Extract unique lead times from the first experiment's metrics file (sorted).
@@ -130,7 +134,10 @@ PY
     --metrics "${METRICS_FILES[@]}" \
     --outdir "${OV_PLOT_DIR}" \
     --title-prefix "${OBSTYPEVAR}" \
-    "${COLOR_ARGS[@]}"
+    --start-date "$START" \
+    --end-date "$END" \
+    "${COLOR_ARGS[@]}" \
+    "${NAME_ARGS[@]}" &
 
   # Per-lead-time plots
   if [[ "${GENERATE_LEADTIME_PLOTS}" -eq 1 ]]; then
@@ -141,13 +148,18 @@ PY
           --outdir "${OV_PLOT_DIR}" \
           --title-prefix "${OBSTYPEVAR}" \
           --lead-time "${LT}" \
-          "${COLOR_ARGS[@]}"
+          --start-date "$START" \
+          --end-date "$END" \
+          "${COLOR_ARGS[@]}" \
+          "${NAME_ARGS[@]}" &
       done
     fi
   else
     echo "Skipping per-lead-time plots for ${OBSTYPEVAR} (GENERATE_LEADTIME_PLOTS != 1)"
   fi
 done
+
+wait
 
 # --- Scorecard (explicit order for title/legend) ---
 # Collect only metric files corresponding to variables in OBSVARS (and that actually exist)
@@ -165,9 +177,13 @@ if [[ ${#METRICS_FILES[@]} -gt 0 ]]; then
   python3 -m src.scorecard \
     --exp-a "${EXPS[0]}" \
     --exp-b "${EXPS[1]}" \
+    --exp-a-name "${EXP_NAMES[0]}" \
+    --exp-b-name "${EXP_NAMES[1]}" \
     --metrics "${METRICS_FILES[@]}" \
     --outdir "${PLOTS}" \
-    --title "Scorecard"
+    --title "Scorecard" \
+    --start-date "$START" \
+    --end-date "$END"
 else
   echo "No metric files found for listed variables; skipping scorecard."
 fi
