@@ -74,6 +74,7 @@ echo VERIF_DATA_PATH="${FULL_MASTER_OUTPUT}" php -S localhost:8000 -t webapp
 echo -e "
 ----- Generating Static Webapp -----"
 WEBAPP_OUTPUT="${MASTER_OUTPUT}_webapp"
+FULL_WEBAPP_OUTPUT=$(realpath ${MASTER_OUTPUT}_webapp)
 echo "Creating static webapp at: ${WEBAPP_OUTPUT}"
 rm -rf "${WEBAPP_OUTPUT}"
 mkdir -p "${WEBAPP_OUTPUT}"
@@ -106,3 +107,4 @@ echo "    STATIC WEBAPP GENERATED"
 echo "    Results are in: ${WEBAPP_OUTPUT}"
 echo "=================================================="
 
+echo php -S localhost:8000 -t $FULL_WEBAPP_OUTPUT
