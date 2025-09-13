@@ -2,7 +2,24 @@
 header('Content-Type: application/json');
 
 // The root directory where project data is stored.
-$data_root = './out/unified_verification/';
+// It's configured via an environment variable 'VERIF_DATA_PATH' when starting the PHP server.
+$user_path = getenv('VERIF_DATA_PATH') ?: 'webapp/out/unified_verification';
+
+// Handle both absolute and relative paths.
+if (substr($user_path, 0, 1) === '/') {
+    $data_root = realpath($user_path);
+} else {
+    $data_root = realpath(__DIR__ . '/../' . $user_path);
+}
+
+// Check if the directory exists
+if ($data_root === false || !is_dir($data_root)) {
+    echo json_encode(['error' => 'Verification data directory not found at: ' . htmlspecialchars($user_path) . '. Please set VERIF_DATA_PATH correctly.']);
+    exit;
+}
+
+// Ensure trailing slash
+$data_root = rtrim($data_root, '/') . '/';
 
 $action = $_GET['action'] ?? 'get_projects';
 
@@ -14,6 +31,7 @@ if ($action === 'get_projects') {
         exit;
     }
 
+    $webapp_root_path = realpath(__DIR__);
     $projects = array_filter(scandir($data_root), function($item) use ($data_root) {
         return is_dir($data_root . $item) && !in_array($item, ['.', '..']);
     });
@@ -49,7 +67,7 @@ if ($action === 'get_projects') {
                 }
                 $cleaned_plot_type = str_replace('combined_', '', $cleaned_plot_type);
 
-                $response[$project][$var_name][$cleaned_plot_type] = $file;
+                $response[$project][$var_name][$cleaned_plot_type] = str_replace($webapp_root_path . '/', '', $file);
             }
         }
 
@@ -61,7 +79,7 @@ if ($action === 'get_projects') {
                 if (!isset($response[$project]['Scorecards'])) {
                     $response[$project]['Scorecards'] = [];
                 }
-                $response[$project]['Scorecards'][$filename] = $file;
+                $response[$project]['Scorecards'][$filename] = str_replace($webapp_root_path . '/', '', $file);
             }
         }
     }
