@@ -1,0 +1,224 @@
+// verify_cpp_parallel.cpp (Simplified: All common key logic removed)
+#include "DataTypes.hpp"
+#include "FileUtils.hpp"
+#include "VerificationUtils.hpp"
+
+#include <iostream>
+#include <string>
+#include <vector>
+#include <filesystem>
+#include <fstream>
+#include <map>
+#include <unordered_map>
+#include <cmath>
+#include <algorithm>
+#include <chrono>
+#include <omp.h>
+
+namespace fs = std::filesystem;
+
+int main(int argc, char* argv[]) {
+    // Simplified argument parsing
+    if (argc < 6) {
+        std::cerr << "Usage: " << argv[0] << " <start_YYYYMMDDHH> <end_YYYYMMDDHH> <fcint> <vobs_dir> <vfld_exp_dir1> [<vfld_exp_dir2> ...]" << std::endl;
+        return 1;
+    }
+
+    long long start_dt = std::stoll(argv[1]);
+    long long end_dt = std::stoll(argv[2]);
+    int fcint;
+    try {
+        fcint = std::stoi(argv[3]);
+    } catch (const std::exception& e) {
+        std::cerr << "Error: Invalid fcint '" << argv[3] << "'. Must be an integer." << std::endl;
+        return 1;
+    }
+    const fs::path vobs_path = argv[4];
+    
+    std::vector<fs::path> experiment_paths;
+    for (int i = 5; i < argc; ++i) {
+        experiment_paths.push_back(argv[i]);
+    }
+
+    auto script_start_time = std::chrono::high_resolution_clock::now();
+    
+    std::vector<FileInfo> vfld_files;
+    std::vector<FileInfo> vobs_files;
+    std::cout << "Discovering and parsing filenames..." << std::endl;
+    for (const auto& exp_path_raw : experiment_paths) {
+        fs::path exp_path = exp_path_raw;
+        std::string experiment_name = exp_path.filename().string();
+        if (experiment_name.empty() || experiment_name == ".") { experiment_name = exp_path.parent_path().filename().string(); }
+        for (const auto& entry : fs::directory_iterator(exp_path)) {
+            if (entry.is_regular_file()) {
+                FileInfo info = parse_filename(entry.path().string());
+                if (info.type == "vfld" && info.base_time >= start_dt && info.base_time <= end_dt && (info.base_time % 100) % fcint == 0) {
+                    info.experiment = experiment_name;
+                    vfld_files.push_back(info);
+                }
+            }
+        }
+    }
+    for (const auto& entry : fs::recursive_directory_iterator(vobs_path)) {
+        if (entry.is_regular_file()) { FileInfo info = parse_filename(entry.path().string()); if (info.type == "vobs") vobs_files.push_back(info); }
+    }
+    std::cout << "Found " << vobs_files.size() << " vobs files and " << vfld_files.size() << " vfld files to process." << std::endl;
+    if (vfld_files.empty() || vobs_files.empty()) { std::cerr << "Error: No data files found." << std::endl; return 1; }
+
+    auto vobs_read_start_time = std::chrono::high_resolution_clock::now();
+    std::cout << "Reading all vobs files into memory (in parallel)..." << std::endl;
+    std::unordered_map<long long, VobsData> vobs_data_map;
+    #pragma omp parallel for
+    for (size_t i = 0; i < vobs_files.size(); ++i) {
+        const auto& vobs_info = vobs_files[i];
+        int version;
+        std::vector<SurfaceStation> stations_vec;
+        std::vector<TempLevel> temp_levels_vec;
+        read_data_file(vobs_info.path, false, version, stations_vec, temp_levels_vec);
+        #pragma omp critical
+        {
+            for (const auto& station : stations_vec) { vobs_data_map[vobs_info.valid_time].stations[station.id] = station; }
+            vobs_data_map[vobs_info.valid_time].temp_levels.insert(vobs_data_map[vobs_info.valid_time].temp_levels.end(), temp_levels_vec.begin(), temp_levels_vec.end());
+        }
+    }
+    auto vobs_read_end_time = std::chrono::high_resolution_clock::now();
+    std::cout << "--- Time to read all vobs files: " << std::chrono::duration<double>(vobs_read_end_time - vobs_read_start_time).count() << " seconds ---" << std::endl;
+
+    auto verification_start_time = std::chrono::high_resolution_clock::now();
+    std::cout << "Starting verification loop (in parallel)..." << std::endl;
+    std::map<ResultKey, AggregatedStats> final_surface_results;
+    std::map<TempResultKey, AggregatedStats> final_temp_results;
+
+    const std::vector<std::string> supported_variables = {"NN","DD","FF","TT","RH","PS","PE","QQ","VI","TD","TX","TN","GG","GX","FX","FI"};
+    
+    #pragma omp parallel
+    {
+        std::map<ResultKey, AggregatedStats> local_surface_results;
+        std::map<TempResultKey, AggregatedStats> local_temp_results;
+        #pragma omp for nowait
+        for (size_t i = 0; i < vfld_files.size(); ++i) {
+            const auto& vfld_info = vfld_files[i];
+            auto it_vobs = vobs_data_map.find(vfld_info.valid_time);
+            if (it_vobs == vobs_data_map.end()) { continue; }
+            
+            const auto& vobs_stations = it_vobs->second.stations;
+            const auto& vobs_temp_levels = it_vobs->second.temp_levels;
+            int version;
+            std::vector<SurfaceStation> vfld_stations_vec;
+            std::vector<TempLevel> vfld_temp_levels_vec;
+            read_data_file(vfld_info.path, true, version, vfld_stations_vec, vfld_temp_levels_vec);
+
+            for (const auto& station_vfld : vfld_stations_vec) {
+                auto it_station_vobs = vobs_stations.find(station_vfld.id);
+                if (it_station_vobs != vobs_stations.end()) {
+                    const auto& station_vobs = it_station_vobs->second;
+                    auto process_var = [&](const std::string& var, double vfld_val, double vobs_val){
+                        if (vfld_val > -98.0 && vobs_val > -98.0) {
+                            double error = (var == "DD") ? directional_diff(vfld_val, vobs_val) : (vfld_val - vobs_val);
+                            if (is_missing(error)) return;
+                            ResultKey key = {vfld_info.experiment, vfld_info.lead_time, var, vfld_info.valid_time};
+                            auto& stats = local_surface_results[key];
+                            stats.sum_of_errors += error;
+                            stats.sum_of_squared_errors += error*error;
+                            stats.count++;
+                        }
+                    };
+                    for (const auto& var : supported_variables) {
+                        if(var=="NN")process_var("NN",station_vfld.nn,station_vobs.nn);else if(var=="DD")process_var("DD",station_vfld.dd,station_vobs.dd);
+                        else if(var=="FF")process_var("FF",station_vfld.ff,station_vobs.ff);else if(var=="TT")process_var("TT",station_vfld.tt,station_vobs.tt);
+                        else if(var=="RH")process_var("RH",station_vfld.rh,station_vobs.rh);else if(var=="PS")process_var("PS",station_vfld.ps,station_vobs.ps);
+                        else if(var=="PE")process_var("PE",station_vfld.pe,station_vobs.pe);else if(var=="QQ")process_var("QQ",station_vfld.qq,station_vobs.qq);
+                        else if(var=="VI")process_var("VI",station_vfld.vi,station_vobs.vi);else if(var=="TD")process_var("TD",station_vfld.td,station_vobs.td);
+                        else if(var=="TX")process_var("TX",station_vfld.tx,station_vobs.tx);else if(var=="TN")process_var("TN",station_vfld.tn,station_vobs.tn);
+                        else if(var=="GG")process_var("GG",station_vfld.gg,station_vobs.gg);else if(var=="GX")process_var("GX",station_vfld.gx,station_vobs.gx);
+                        else if(var=="FX")process_var("FX",station_vfld.fx,station_vobs.fx);
+                    }
+                }
+            }
+
+            if (!vfld_temp_levels_vec.empty() && !vobs_temp_levels.empty()) {
+                std::unordered_multimap<long long, const TempLevel*> vobs_index;
+                auto mk_key = [](int sid, double pres){ return ((long long)sid << 32) ^ (long long)std::llround(pres * 100.0); };
+                for (const auto& lvl : vobs_temp_levels) vobs_index.emplace(mk_key(lvl.station_id, lvl.pressure), &lvl);
+
+                auto process_temp_var = [&](const std::string& var, const TempLevel& tl_f, const TempLevel& tl_o){
+                    double fval = get_temp_value(tl_f, var);
+                    double oval = get_temp_value(tl_o, var);
+                    if (fval > -98.0 && oval > -98.0) {
+                        double error = (var == "DD") ? directional_diff(fval, oval) : (fval - oval);
+                        if (is_missing(error)) return;
+                        TempResultKey key = {vfld_info.experiment, vfld_info.lead_time, var, tl_f.pressure, vfld_info.valid_time};
+                        auto& stats = local_temp_results[key];
+                        stats.sum_of_errors += error;
+                        stats.sum_of_squared_errors += error * error;
+                        stats.count++;
+                    }
+                };
+
+                for(const auto& tl_vfld : vfld_temp_levels_vec) {
+                    auto range = vobs_index.equal_range(mk_key(tl_vfld.station_id, tl_vfld.pressure));
+                    if (range.first != range.second) {
+                        const TempLevel* tl_vobs = range.first->second;
+                        process_temp_var("TT", tl_vfld, *tl_vobs);
+                        process_temp_var("RH", tl_vfld, *tl_vobs);
+                        process_temp_var("FI", tl_vfld, *tl_vobs);
+                        process_temp_var("QQ", tl_vfld, *tl_vobs);
+                        process_temp_var("DD", tl_vfld, *tl_vobs);
+                        process_temp_var("FF", tl_vfld, *tl_vobs);
+                    }
+                }
+            }
+        }
+        #pragma omp critical
+        {
+            for(const auto& p : local_surface_results) {
+                auto& g = final_surface_results[p.first];
+                g.sum_of_errors += p.second.sum_of_errors;
+                g.sum_of_squared_errors += p.second.sum_of_squared_errors;
+                g.count += p.second.count;
+            }
+            for(const auto& p : local_temp_results) {
+                auto& g = final_temp_results[p.first];
+                g.sum_of_errors += p.second.sum_of_errors;
+                g.sum_of_squared_errors += p.second.sum_of_squared_errors;
+                g.count += p.second.count;
+            }
+        }
+    }
+    auto verification_end_time = std::chrono::high_resolution_clock::now();
+    std::cout << "--- Time for verification processing: " << std::chrono::duration<double>(verification_end_time - verification_start_time).count() << " seconds ---" << std::endl;
+    
+    if (fs::exists("surface_metrics.csv")) fs::remove("surface_metrics.csv");
+    if (fs::exists("temp_metrics.csv")) fs::remove("temp_metrics.csv");
+
+    std::cout << "Saving surface metrics to surface_metrics.csv" << std::endl;
+    std::ofstream outfile("surface_metrics.csv", std::ios::trunc);
+    outfile.precision(6);
+    outfile << std::fixed << "experiment,lead_time,vt_hour,obstypevar,bias,rmse,n_samples\n";
+    for(const auto& pair : final_surface_results) {
+        if (pair.second.count > 0) {
+            double bias = pair.second.sum_of_errors / pair.second.count;
+            double rmse = std::sqrt(pair.second.sum_of_squared_errors / pair.second.count);
+            outfile << pair.first.experiment << "," << pair.first.lead_time << "," << pair.first.vt_hour << "," << pair.first.variable << "," << bias << "," << rmse << "," << pair.second.count << "\n";
+        }
+    }
+    outfile.close();
+
+    std::cout << "Saving temp metrics to temp_metrics.csv" << std::endl;
+    std::ofstream temp_outfile("temp_metrics.csv", std::ios::trunc);
+    temp_outfile.precision(6);
+    temp_outfile << std::fixed << "experiment,lead_time,vt_hour,pressure_level,obstypevar,bias,rmse,n_samples\n";
+    for(const auto& pair : final_temp_results) {
+        if (pair.second.count > 0) {
+            double bias = pair.second.sum_of_errors / pair.second.count;
+            double rmse = std::sqrt(pair.second.sum_of_squared_errors / pair.second.count);
+            temp_outfile << pair.first.experiment << "," << pair.first.lead_time << "," << pair.first.vt_hour << "," << pair.first.pressure_level << "," << pair.first.variable << "," << bias << "," << rmse << "," << pair.second.count << "\n";
+        }
+    }
+    temp_outfile.close();
+
+    auto script_end_time = std::chrono::high_resolution_clock::now();
+    std::cout << "\n--- Total script execution time: " << std::chrono::duration<double>(script_end_time - script_start_time).count() << " seconds ---" << std::endl;
+
+    return 0;
+}

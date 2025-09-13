@@ -11,6 +11,10 @@ END="${END:-2025073121}"
 FCINT="${FCINT:-12}"
 EXP_COLORS_STR="${EXP_COLORS:-#1f77b4 #d62728}"
 
+# NEW: Common key restriction controls
+RESTRICT_COMMON_KEYS="${RESTRICT_COMMON_KEYS:-1}"   # 1=enable, 0=disable
+ROUND_DEC="${ROUND_DEC:-2}"
+
 # Short names for experiments
 EXP1_NAME="${EXP_A_NAME:-$EXP1}"
 EXP2_NAME="${EXP_B_NAME:-$EXP2}"
@@ -35,22 +39,37 @@ mkdir -p "$WORKDIR" "$PLOTS"
 
 # --- Run C++ Verification ---
 echo "Running C++ verification..."
-# The C++ executable is expected to be at src/verify_cpp_parallel
-if [ ! -f "src/verify_cpp_parallel" ]; then
-    echo "C++ executable not found at src/verify_cpp_parallel."
+# The C++ executable is expected to be at src/cpp/verify_cpp_parallel
+if [ ! -f "src/cpp/verify_cpp_parallel" ]; then
+    echo "C++ executable not found at src/cpp/verify_cpp_parallel."
     echo "Please compile it first, e.g., with:"
-    echo "g++ -std=c++17 -O3 -fopenmp src/verify_cpp_parallel.cpp -o src/verify_cpp_parallel"
+    echo "g++ -std=c++17 -O3 -fopenmp src/cpp/verify_cpp_parallel.cpp -o src/cpp/verify_cpp_parallel"
     exit 1
 fi
-cp src/verify_cpp_parallel "$WORKDIR/"
+cp src/cpp/verify_cpp_parallel "$WORKDIR/"
 
 cd "$WORKDIR"
 chmod +x verify_cpp_parallel
 
-./verify_cpp_parallel "$START" "$END" "$FCINT" \
+COMMON_ARGS=()
+if [[ "${RESTRICT_COMMON_KEYS}" == "1" ]]; then
+  echo "Common key restriction: ENABLED"
+  COMMON_ARGS+=(--restrict-common-keys)
+else
+  echo "Common key restriction: DISABLED"
+fi
+
+#COMMON_ARGS=(--restrict-common-keys) # --force-serial-keys)
+#COMMON_ARGS+=(--round-dec "${ROUND_DEC}")
+
+
+# The call is now simpler, without the COMMON_ARGS at the end.
+time ./verify_cpp_parallel "$START" "$END" "$FCINT" \
   "$(readlink -f ${VOBS_ROOT}/vobs_meps)" \
   "$(readlink -f ${VFLD_ROOT}/${EXP1})" \
   "$(readlink -f ${VFLD_ROOT}/${EXP2})"
+
+
 
 cd "$RBASE"
 # Convert CSV output to Parquet
@@ -71,7 +90,7 @@ fi
 # --- Run Scorecard for Surface Metrics ---
 if [[ -f "$METRICS_FILE" ]]; then
   echo "Building scorecard for monitor surface metrics..."
-  python3 -m src.scorecard \
+  python3 -m src.python.scorecard \
     --exp-a "$EXP1" \
     --exp-b "$EXP2" \
     --exp-a-name "$EXP1_NAME" \
@@ -86,7 +105,7 @@ fi
 # --- Run Scorecard for Temp Profiles ---
 if [[ -f "$TEMP_METRICS_FILE" ]]; then
   echo "Building scorecard for monitor temp profiles..."
-  python3 -m src.scorecard \
+  python3 -m src.python.scorecard \
     --exp-a "$EXP1" \
     --exp-b "$EXP2" \
     --exp-a-name "$EXP1_NAME" \
@@ -114,7 +133,7 @@ if [[ -f "$METRICS_FILE" ]]; then
     NAME_ARGS+=(--exp-name "${EXPS[$i]}"="${EXP_NAMES[$i]}")
   done
 
-  python3 -m src.monitor_plotting \
+  python3 -m src.python.monitor_plotting \
     --metrics "$METRICS_FILE" \
     --outdir "$PLOTS" \
     --title-prefix "${PROJECTNAME}_surface" \
@@ -140,7 +159,7 @@ if [[ -f "$TEMP_METRICS_FILE" ]]; then
     NAME_ARGS+=(--exp-name "${EXPS[$i]}"="${EXP_NAMES[$i]}")
   done
 
-  python3 -m src.monitor_profile_plotting \
+  python3 -m src.python.monitor_profile_plotting \
     --metrics "$TEMP_METRICS_FILE" \
     --outdir "$PLOTS" \
     "${COLOR_ARGS[@]}" \

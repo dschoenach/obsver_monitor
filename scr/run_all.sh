@@ -27,11 +27,11 @@ export OBSVER_PATH_B="data/obsver/${MONITOR_EXP_B}"
 
 # --- Date/Time Configuration ---
 export START="2025070200"
-export END="2025080121"
+export END="2025080321"
 export FCINT=12
 
 # --- Obsver Specific Configuration ---
-export OBSVARS=("atms_tb" "amsua_tb" "mhs_tb" "mwhs2_tb" "airep_t" "airep_u" "airep_v" "ascat_dd" "ascat_ff" "temp_q" "temp_t" "temp_u" "temp_v") # "atms_tb" # "amsua_tb" "mhs_tb" etc.
+export OBSVARS="atms_tb amsua_tb mhs_tb mwhs2_tb airep_t airep_u airep_v ascat_dd ascat_ff temp_q temp_t temp_u temp_v"
 export USE_COMMON_KEYS=1
 export ROUND_DEC=2
 export EXP_COLORS="#1f77b4 #d62728"

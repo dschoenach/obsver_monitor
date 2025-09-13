@@ -49,7 +49,7 @@ for OV in "${OBSVARS[@]}"; do
       BUILD_ARGS+=(--exp "${EXPS[$i]}" "${EXPPATHS[$i]}")
     done
 
-    python3 -m src.build_common_keys \
+    python3 -m src.python.build_common_keys \
       --obstypevar "${OBSTYPEVAR}" \
       --round-dec "${ROUND_DEC}" \
       --out "${KEYFILE}" \
@@ -66,7 +66,7 @@ for OV in "${OBSVARS[@]}"; do
     OUT_MET="${OUTDIR}/${EXP}_${OBSTYPEVAR}_metrics.parquet"
     echo "  ${EXP} -> ${OUT_MET}"
     CMD=(
-      python3 -m src.verify
+      python3 -m src.python.verify
       --exp-name "${EXP}"
       --data-root "${ROOT}"
       --obstypevar "${OBSTYPEVAR}"
@@ -130,7 +130,7 @@ PY
 
   ALL_LEAD_TIMES_PER_VAR+=("$LTS")
 
-  python3 -m src.joint_plotting \
+  python3 -m src.python.joint_plotting \
     --metrics "${METRICS_FILES[@]}" \
     --outdir "${OV_PLOT_DIR}" \
     --title-prefix "${OBSTYPEVAR}" \
@@ -143,7 +143,7 @@ PY
   if [[ "${GENERATE_LEADTIME_PLOTS}" -eq 1 ]]; then
     if [[ -n "${LTS}" ]]; then
       for LT in ${LTS}; do
-        python3 -m src.joint_plotting \
+        python3 -m src.python.joint_plotting \
           --metrics "${METRICS_FILES[@]}" \
           --outdir "${OV_PLOT_DIR}" \
           --title-prefix "${OBSTYPEVAR}" \
@@ -174,7 +174,7 @@ done
 if [[ ${#METRICS_FILES[@]} -gt 0 ]]; then
   # Fixed unmatched brace in echo (removed stray })
   echo "Building scorecard from ${#METRICS_FILES[@]} metric files (vars: ${OBSVARS[*]})"
-  python3 -m src.scorecard \
+  python3 -m src.python.scorecard \
     --exp-a "${EXPS[0]}" \
     --exp-b "${EXPS[1]}" \
     --exp-a-name "${EXP_NAMES[0]}" \
