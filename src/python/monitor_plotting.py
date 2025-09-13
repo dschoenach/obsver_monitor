@@ -2,7 +2,8 @@ import argparse
 import os
 import polars as pl
 import matplotlib.pyplot as plt
-from typing import Dict
+from typing import Dict, Optional
+import matplotlib.ticker as mticker
 
 METRIC_STYLES = {
     "rmse": {"linestyle": "--", "label": "RMSE"},
@@ -25,7 +26,7 @@ def _aggregate_by_vt_hour(df: pl.DataFrame) -> pl.DataFrame:
                   pl.sum("n_samples").alias("n_sum")
               ]))
 
-def plot_series(df: pl.DataFrame, outdir: str, title_prefix: str, exp_colors: Dict[str, str], exp_names: Dict[str, str], x_axis: str, start_date: str, end_date: str) -> None: 
+def plot_series(df: pl.DataFrame, outdir: str, title_prefix: str, exp_colors: Dict[str, str], exp_names: Dict[str, str], x_axis: str, start_date: str, end_date: str, fcint: Optional[int]) -> None: 
     if x_axis == "lead_time":
         agg = _aggregate_by_lead_time(df).sort("lead_time")
         x_label = "Lead Time (h)"
@@ -79,9 +80,22 @@ def plot_series(df: pl.DataFrame, outdir: str, title_prefix: str, exp_colors: Di
         title = f"{title_prefix} - {ov} - {x_label} Series"
         if start_date and end_date:
             title += f"\n{start_date} - {end_date}"
+        
+        if fcint is not None:
+            fcint_hours = ", ".join(f"{h:02d}" for h in range(0, 24, fcint))
+            title += f"\n{fcint_hours} UTC"
+
         ax.set_title(title)
         ax.set_xlabel(x_label)
         ax.set_ylabel("Value")
+
+        if x_axis == "vt_hour":
+            ax.xaxis.set_major_locator(mticker.MaxNLocator(nbins=10))
+        elif x_axis == "lead_time":
+            max_lead_time = df["lead_time"].max()
+            if max_lead_time is not None:
+                ax.set_xticks(range(0, max_lead_time + 1, 3))
+
         ax.tick_params(axis='x', rotation=45)
         ax.grid(True, linestyle="--", linewidth=0.5, alpha=0.7)
         ax.legend(handles=line_handles, loc='center left', bbox_to_anchor=(1.14, 0.5), frameon=True)
@@ -102,6 +116,7 @@ def main() -> None:
                         help="Experiment color mapping EXP=COLOR (repeatable).")
     parser.add_argument("--exp-name", action="append",
                         help="Experiment name mapping LONG_NAME=SHORT_NAME (repeatable).")
+    parser.add_argument("--fcint", type=int, help="Forecast interval in hours.")
     args = parser.parse_args()
     os.makedirs(args.outdir, exist_ok=True)
 
@@ -154,8 +169,8 @@ def main() -> None:
         if e not in exp_colors:
             exp_colors[e] = next(default_cycle)
 
-    plot_series(all_df, args.outdir, args.title_prefix, exp_colors, exp_names_map, "lead_time", start_date, end_date)
-    plot_series(all_df, args.outdir, args.title_prefix, exp_colors, exp_names_map, "vt_hour", start_date, end_date)
+    plot_series(all_df, args.outdir, args.title_prefix, exp_colors, exp_names_map, "lead_time", start_date, end_date, args.fcint)
+    plot_series(all_df, args.outdir, args.title_prefix, exp_colors, exp_names_map, "vt_hour", start_date, end_date, args.fcint)
 
 if __name__ == "__main__":
     main()

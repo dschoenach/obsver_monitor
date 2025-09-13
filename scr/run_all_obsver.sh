@@ -3,9 +3,14 @@ set -euo pipefail
 
 # --- Configuration ---
 # Use environment variables from master script, or provide defaults
-EXPS=("${OBSVER_EXP_A:-meps2_preop_rednmc06}" "${OBSVER_EXP_B:-meps2_preop_rednmc06_t2h2}")
-EXP_NAMES=("${EXP_A_NAME:-${EXPS[0]}}" "${EXP_B_NAME:-${EXPS[1]}}")
-EXPPATHS=("${OBSVER_PATH_A:-data/obsver/meps2_preop_rednmc06mbr000}" "${OBSVER_PATH_B:-data/obsver/meps2_preop_rednmc06_t2h2mbr000}")
+read -r -a EXPS <<< "${OBSVER_EXP_BASES:-meps2_preop_rednmc06 meps2_preop_rednmc06_t2h2}"
+read -r -a EXP_NAMES <<< "${OBSVER_EXP_NAMES:-${EXPS[0]} ${EXPS[1]}}"
+
+EXPPATHS=()
+for EXP in "${EXPS[@]}"; do
+  EXPPATHS+=(data/obsver/${EXP})
+done
+
 OBSVARS_STR="${OBSVARS:-atms_tb}"
 # No eval needed here, can be read directly into an array
 read -r -a OBSVARS <<< "$OBSVARS_STR"
@@ -13,8 +18,8 @@ OBSVER_HOURS_STR="${OBSVER_HOURS:-}"
 read -r -a OBSVER_HOURS <<< "$OBSVER_HOURS_STR"
 
 USE_COMMON_KEYS="${USE_COMMON_KEYS:-0}"
-START="${START:-2025070200}"
-END="${END:-2025080121}"
+START="${START}"
+END="${END}"
 FCINT="${FCINT:-12}"
 ROUND_DEC="${ROUND_DEC:-2}"
 EXP_COLORS_STR="${EXP_COLORS:-#1f77b4 #d62728}"
@@ -55,6 +60,8 @@ for OV in "${OBSVARS[@]}"; do
       --obstypevar "${OBSTYPEVAR}" \
       --round-dec "${ROUND_DEC}" \
       --out "${KEYFILE}" \
+      --start "${START}" \
+      --end "${END}" \
       "${BUILD_ARGS[@]}"
   else
     KEYFILE=""
@@ -182,17 +189,18 @@ for OV in "${OBSVARS[@]}"; do
   done
 done
 
-if [[ ${#METRICS_FILES[@]} -gt 0 ]]; then
-  # Fixed unmatched brace in echo (removed stray })
-  echo "Building scorecard from ${#METRICS_FILES[@]} metric files (vars: ${OBSVARS[*]})"
-  python3 -m src.python.scorecard \
-    --exp-a "${EXPS[0]}" \
-    --exp-b "${EXPS[1]}" \
-    --exp-a-name "${EXP_NAMES[0]}" \
-    --exp-b-name "${EXP_NAMES[1]}" \
-    --metrics "${METRICS_FILES[@]}" \
-    --outdir "${PLOTS}" \
-    --title "Scorecard"
+if [[ ${#METRICS_FILES[@]} -gt 0 && ${#EXPS[@]} -gt 1 ]]; then
+  echo "Building scorecards from ${#METRICS_FILES[@]} metric files (vars: ${OBSVARS[*]})"
+  for i in $(seq 1 $((${#EXPS[@]} - 1))); do
+    python3 -m src.python.scorecard \
+      --exp-a "${EXPS[0]}" \
+      --exp-b "${EXPS[$i]}" \
+      --exp-a-name "${EXP_NAMES[0]}" \
+      --exp-b-name "${EXP_NAMES[$i]}" \
+      --metrics "${METRICS_FILES[@]}" \
+      --outdir "${PLOTS}" \
+      --title "Scorecard_${EXP_NAMES[0]}_vs_${EXP_NAMES[$i]}"
+  done
 else
-  echo "No metric files found for listed variables; skipping scorecard."
+  echo "No metric files found or not enough experiments for scorecard; skipping scorecard."
 fi

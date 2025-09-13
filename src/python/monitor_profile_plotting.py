@@ -1,7 +1,7 @@
 import argparse, os
 import polars as pl
 import matplotlib.pyplot as plt
-from typing import Dict
+from typing import Dict, Optional, List
 
 METRIC_STYLES = {
     "rmse": {"linestyle": "--", "label": "RMSE"},
@@ -16,7 +16,7 @@ def _aggregate_profile(df: pl.DataFrame) -> pl.DataFrame:
                   pl.sum("n_samples").alias("n_sum")
               ]))
 
-def plot_temp_profiles(df: pl.DataFrame, outdir: str, exp_colors: Dict[str, str], exp_names: Dict[str, str], start_date: str, end_date: str) -> None:
+def plot_temp_profiles(df: pl.DataFrame, outdir: str, exp_colors: Dict[str, str], exp_names: Dict[str, str], start_date: str, end_date: str, fcint: Optional[int], monitor_temp_cycles: Optional[int], cycles: Optional[List[int]]) -> None:
     agg = _aggregate_profile(df)
     variables = agg["obstypevar"].unique().to_list()
 
@@ -59,6 +59,22 @@ def plot_temp_profiles(df: pl.DataFrame, outdir: str, exp_colors: Dict[str, str]
         title = f"Temp Profile - {var}"
         if start_date and end_date:
             title += f"\n{start_date} - {end_date}"
+        
+        title_line3 = ""
+        if fcint is not None:
+            fcint_hours = ", ".join(f"{h:02d}" for h in range(0, 24, fcint))
+            title_line3 = f"{fcint_hours} UTC"
+
+        if cycles is not None:
+            cycles_str = ", ".join(f"{c:02d}" for c in cycles)
+            if title_line3:
+                title_line3 += f" + {{{cycles_str}}}"
+            else:
+                title_line3 = f"{{{cycles_str}}}"
+
+        if title_line3:
+            title += f"\n{title_line3}"
+
         ax.set_title(title)
         ax.set_xlabel("Value")
         ax.set_ylabel("Pressure (hPa)")
@@ -74,7 +90,7 @@ def plot_temp_profiles(df: pl.DataFrame, outdir: str, exp_colors: Dict[str, str]
         plt.close(fig)
         print(f"Saved plot: {path}")
 
-def plot_series(df: pl.DataFrame, outdir: str, exp_colors: Dict[str, str], exp_names: Dict[str, str], x_axis: str, start_date: str, end_date: str) -> None:
+def plot_series(df: pl.DataFrame, outdir: str, exp_colors: Dict[str, str], exp_names: Dict[str, str], x_axis: str, start_date: str, end_date: str, fcint: Optional[int], monitor_temp_cycles: Optional[int], cycles: Optional[List[int]]) -> None:
     if x_axis == "lead_time":
         agg = df.group_by(["experiment", "lead_time", "obstypevar"]).agg(pl.mean("bias"), pl.mean("rmse"), pl.sum("n_samples").alias("n_sum")).sort("lead_time")
         x_label = "Lead Time (h)"
@@ -117,6 +133,22 @@ def plot_series(df: pl.DataFrame, outdir: str, exp_colors: Dict[str, str], exp_n
         title = f"Temp Series - {var} - {x_label}"
         if start_date and end_date:
             title += f"\n{start_date} - {end_date}"
+
+        title_line3 = ""
+        if fcint is not None:
+            fcint_hours = ", ".join(f"{h:02d}" for h in range(0, 24, fcint))
+            title_line3 = f"{fcint_hours} UTC"
+
+        if cycles is not None:
+            cycles_str = ", ".join(f"{c:02d}" for c in cycles)
+            if title_line3:
+                title_line3 += f" + {{{cycles_str}}}"
+            else:
+                title_line3 = f"{{{cycles_str}}}"
+
+        if title_line3:
+            title += f"\n{title_line3}"
+
         ax.set_title(title)
         ax.set_xlabel(x_label)
         ax.set_ylabel("Value")
@@ -131,7 +163,7 @@ def plot_series(df: pl.DataFrame, outdir: str, exp_colors: Dict[str, str], exp_n
         plt.close(fig)
         print(f"Saved plot: {path}")
 
-def main() -> None:
+def main() -> None: 
     parser = argparse.ArgumentParser(description="Plotting for temperature profile metrics.")
     parser.add_argument("--metrics", required=True, help="Metrics parquet file.")
     parser.add_argument("--outdir", required=True, help="Output directory for plots.")
@@ -139,6 +171,8 @@ def main() -> None:
                         help="Experiment color mapping EXP=COLOR (repeatable).")
     parser.add_argument("--exp-name", action="append",
                         help="Experiment name mapping LONG_NAME=SHORT_NAME (repeatable).")
+    parser.add_argument("--fcint", type=int, help="Forecast interval in hours.")
+    parser.add_argument("--monitor-temp-cycles", type=int, help="Cycle interval for temperature plots.")
     args = parser.parse_args()
     os.makedirs(args.outdir, exist_ok=True)
 
@@ -152,6 +186,13 @@ def main() -> None:
     if df.is_empty():
         print("Empty metrics file; aborting.")
         return
+
+    cycles = None
+    if args.monitor_temp_cycles:
+        max_lead_time = df["lead_time"].max()
+        if max_lead_time is not None:
+            cycles = range(args.monitor_temp_cycles, max_lead_time + 1, args.monitor_temp_cycles)
+            df = df.filter(pl.col("lead_time").is_in(cycles))
 
     start_date = df["vt_hour"].min()
     end_date = df["vt_hour"].max()
@@ -179,9 +220,9 @@ def main() -> None:
         if e not in exp_colors:
             exp_colors[e] = next(default_cycle)
 
-    plot_temp_profiles(df, args.outdir, exp_colors, exp_names_map, start_date, end_date)
-    plot_series(df, args.outdir, exp_colors, exp_names_map, "lead_time", start_date, end_date)
-    plot_series(df, args.outdir, exp_colors, exp_names_map, "vt_hour", start_date, end_date)
+    plot_temp_profiles(df, args.outdir, exp_colors, exp_names_map, start_date, end_date, args.fcint, args.monitor_temp_cycles, cycles)
+    plot_series(df, args.outdir, exp_colors, exp_names_map, "lead_time", start_date, end_date, args.fcint, args.monitor_temp_cycles, cycles)
+    plot_series(df, args.outdir, exp_colors, exp_names_map, "vt_hour", start_date, end_date, args.fcint, args.monitor_temp_cycles, cycles)
 
 if __name__ == "__main__":
     main()

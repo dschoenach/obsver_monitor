@@ -4,8 +4,8 @@ set -e
 # --- Configuration ---
 # Use environment variables from master script, or provide defaults
 BASE_OUTDIR="${MONITOR_OUTPUT:-out/verification_run_monitor}"
-EXP1="${MONITOR_EXP_A:-meps2_preop_rednmc06mbr000}"
-EXP2="${MONITOR_EXP_B:-meps2_preop_rednmc06_t2h2mbr000}"
+read -r -a EXPS <<< "${MONITOR_EXP_BASES:-meps2_preop_rednmc06mbr000 meps2_preop_rednmc04mbr000}"
+read -r -a EXP_NAMES <<< "${MONITOR_EXP_NAMES:-REF rednmc04}"
 START="${START:-2025070200}"
 END="${END:-2025073121}"
 FCINT="${FCINT:-12}"
@@ -14,10 +14,6 @@ EXP_COLORS_STR="${EXP_COLORS:-#1f77b4 #d62728}"
 # NEW: Common key restriction controls
 RESTRICT_COMMON_KEYS="${RESTRICT_COMMON_KEYS:-1}"   # 1=enable, 0=disable
 ROUND_DEC="${ROUND_DEC:-2}"
-
-# Short names for experiments
-EXP1_NAME="${EXP_A_NAME:-$EXP1}"
-EXP2_NAME="${EXP_B_NAME:-$EXP2}"
 
 # Define paths
 RBASE=$(pwd)
@@ -31,8 +27,8 @@ TEMP_METRICS_FILE="${WORKDIR}/temp_metrics.parquet"
 
 # --- Setup ---
 echo "Running Monitor Verification"
-echo "Experiments: $EXP1, $EXP2"
-echo "Display Names: $EXP1_NAME, $EXP2_NAME"
+echo "Experiments: ${EXPS[*]}"
+echo "Display Names: ${EXP_NAMES[*]}"
 echo "Output: ${BASE_OUTDIR}"
 echo "--------------------------------------------------"
 mkdir -p "$WORKDIR" "$PLOTS"
@@ -51,24 +47,14 @@ cp src/cpp/verify_cpp_parallel "$WORKDIR/"
 cd "$WORKDIR"
 chmod +x verify_cpp_parallel
 
-COMMON_ARGS=()
-if [[ "${RESTRICT_COMMON_KEYS}" == "1" ]]; then
-  echo "Common key restriction: ENABLED"
-  COMMON_ARGS+=(--restrict-common-keys)
-else
-  echo "Common key restriction: DISABLED"
-fi
+CPP_ARGS=()
+for EXP in "${EXPS[@]}"; do
+  CPP_ARGS+=("$(readlink -f "${VFLD_ROOT}/${EXP}")")
+done
 
-#COMMON_ARGS=(--restrict-common-keys) # --force-serial-keys)
-#COMMON_ARGS+=(--round-dec "${ROUND_DEC}")
-
-
-# The call is now simpler, without the COMMON_ARGS at the end.
 time ./verify_cpp_parallel "$START" "$END" "$FCINT" \
-  "$(readlink -f ${VOBS_ROOT}/vobs_meps)" \
-  "$(readlink -f ${VFLD_ROOT}/${EXP1})" \
-  "$(readlink -f ${VFLD_ROOT}/${EXP2})"
-
+  "$(readlink -f "${VOBS_ROOT}/vobs_meps")" \
+  "${CPP_ARGS[@]}"
 
 
 cd "$RBASE"
@@ -87,41 +73,43 @@ else
 fi
 
 
-# --- Run Scorecard for Surface Metrics ---
-if [[ -f "$METRICS_FILE" ]]; then
-  echo "Building scorecard for monitor surface metrics..."
-  python3 -m src.python.scorecard \
-    --exp-a "$EXP1" \
-    --exp-b "$EXP2" \
-    --exp-a-name "$EXP1_NAME" \
-    --exp-b-name "$EXP2_NAME" \
-    --metrics "$METRICS_FILE" \
-    --outdir "$PLOTS" \
-    --title "${PROJECTNAME}_surface"
+# --- Run Scorecards ---
+if [[ -f "$METRICS_FILE" && ${#EXPS[@]} -gt 1 ]]; then
+  echo "Building scorecards for monitor surface metrics..."
+  for i in $(seq 1 $((${#EXPS[@]} - 1))); do
+    python3 -m src.python.scorecard \
+      --exp-a "${EXPS[0]}" \
+      --exp-b "${EXPS[$i]}" \
+      --exp-a-name "${EXP_NAMES[0]}" \
+      --exp-b-name "${EXP_NAMES[$i]}" \
+      --metrics "$METRICS_FILE" \
+      --outdir "$PLOTS" \
+      --title "${PROJECTNAME}_surface_${EXP_NAMES[0]}_vs_${EXP_NAMES[$i]}"
+  done
 else
-  echo "WARNING: ${METRICS_FILE} not found. Skipping scorecard."
+  echo "WARNING: Not enough experiments for scorecard or metrics file not found."
 fi
 
-# --- Run Scorecard for Temp Profiles ---
-if [[ -f "$TEMP_METRICS_FILE" ]]; then
-  echo "Building scorecard for monitor temp profiles..."
-  python3 -m src.python.scorecard \
-    --exp-a "$EXP1" \
-    --exp-b "$EXP2" \
-    --exp-a-name "$EXP1_NAME" \
-    --exp-b-name "$EXP2_NAME" \
-    --metrics "$TEMP_METRICS_FILE" \
-    --outdir "$PLOTS" \
-    --title "${PROJECTNAME}_temp"
+if [[ -f "$TEMP_METRICS_FILE" && ${#EXPS[@]} -gt 1 ]]; then
+  echo "Building scorecards for monitor temp profiles..."
+  for i in $(seq 1 $((${#EXPS[@]} - 1))); do
+    python3 -m src.python.scorecard \
+      --exp-a "${EXPS[0]}" \
+      --exp-b "${EXPS[$i]}" \
+      --exp-a-name "${EXP_NAMES[0]}" \
+      --exp-b-name "${EXP_NAMES[$i]}" \
+      --metrics "$TEMP_METRICS_FILE" \
+      --outdir "$PLOTS" \
+      --title "${PROJECTNAME}_temp_${EXP_NAMES[0]}_vs_${EXP_NAMES[$i]}"
+  done
 else
-  echo "WARNING: ${TEMP_METRICS_FILE} not found. Skipping temp scorecard."
+  echo "WARNING: Not enough experiments for temp scorecard or temp metrics file not found."
 fi
+
 
 # --- Run Plotting for Surface Metrics ---
 if [[ -f "$METRICS_FILE" ]]; then
   echo "Building timeseries and lead time plots for monitor surface metrics..."
-  EXPS=($EXP1 "$EXP2")
-  EXP_NAMES=($EXP1_NAME "$EXP2_NAME")
   read -r -a EXP_COLORS <<< "$EXP_COLORS_STR"
 
   COLOR_ARGS=()
@@ -137,6 +125,7 @@ if [[ -f "$METRICS_FILE" ]]; then
     --metrics "$METRICS_FILE" \
     --outdir "$PLOTS" \
     --title-prefix "${PROJECTNAME}_surface" \
+    --fcint "$FCINT" \
     "${COLOR_ARGS[@]}" \
     "${NAME_ARGS[@]}" 
 else
@@ -146,8 +135,6 @@ fi
 # --- Run Plotting for Temp Profiles ---
 if [[ -f "$TEMP_METRICS_FILE" ]]; then
   echo "Building temp profile plots for monitor..."
-  EXPS=($EXP1 "$EXP2")
-  EXP_NAMES=($EXP1_NAME "$EXP2_NAME")
   read -r -a EXP_COLORS <<< "$EXP_COLORS_STR"
 
   COLOR_ARGS=()
@@ -159,9 +146,16 @@ if [[ -f "$TEMP_METRICS_FILE" ]]; then
     NAME_ARGS+=(--exp-name "${EXPS[$i]}"="${EXP_NAMES[$i]}")
   done
 
+  TEMP_CYCLES_ARG=()
+  if [[ -n "${MONITOR_TEMP_CYCLES:-}" ]]; then
+    TEMP_CYCLES_ARG+=(--monitor-temp-cycles "${MONITOR_TEMP_CYCLES}")
+  fi
+
   python3 -m src.python.monitor_profile_plotting \
     --metrics "$TEMP_METRICS_FILE" \
     --outdir "$PLOTS" \
+    --fcint "$FCINT" \
+    "${TEMP_CYCLES_ARG[@]}" \
     "${COLOR_ARGS[@]}" \
     "${NAME_ARGS[@]}" 
 else

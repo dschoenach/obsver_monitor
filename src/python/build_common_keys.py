@@ -42,10 +42,19 @@ def pick_table(tables, requested):
         return low[rl]
     return None  # do NOT auto-substitute arbitrary single table (avoid wrong data)
 
-def insert_keys_from_table(con, file_path, table_name, round_dec, debug=False):
+def insert_keys_from_table(con, file_path, table_name, round_dec, start_date, end_date, debug=False):
     con.execute(f"ATTACH '{file_path}' AS db1 (TYPE SQLITE);")
     if debug:
         print(f"[debug] Inserting keys from {file_path} table {table_name}")
+
+    # Build the WHERE clause for date filtering
+    where_clauses = []
+    if start_date:
+        where_clauses.append(f"valid_dttm >= '{start_date}'")
+    if end_date:
+        where_clauses.append(f"valid_dttm <= '{end_date}'")
+    where_sql = f"WHERE {' AND '.join(where_clauses)}" if where_clauses else ""
+
     con.execute(f"""
         INSERT INTO work_keys
         SELECT DISTINCT
@@ -58,7 +67,8 @@ def insert_keys_from_table(con, file_path, table_name, round_dec, debug=False):
                 CAST(ROUND(lon * POW(10,{round_dec})) AS BIGINT),
                 CAST(ROUND(lat * POW(10,{round_dec})) AS BIGINT)
             ) AS HUGEINT) AS obs_key
-        FROM db1."{table_name}";
+        FROM db1."{table_name}"
+        {where_sql};
     """)
     con.execute("DETACH db1;")
 
@@ -68,6 +78,8 @@ def main():
     ap.add_argument("--round-dec", type=int, default=2)
     ap.add_argument("--out", required=True)
     ap.add_argument("--exp", action="append", nargs=2, metavar=("EXP_NAME","DATA_ROOT"))
+    ap.add_argument("--start", help="Start date (YYYY-MM-DDTHH:MM:SS)")
+    ap.add_argument("--end", help="End date (YYYY-MM-DDTHH:MM:SS)")
     ap.add_argument("--debug", action="store_true")
     ap.add_argument("--strict-missing", action="store_true",
                     help="Abort if any SQLite file lacks the requested table or required columns.")
@@ -114,7 +126,7 @@ def main():
                 continue
             # Attach + insert
             try:
-                insert_keys_from_table(con, f, chosen, args.round_dec, args.debug)
+                insert_keys_from_table(con, f, chosen, args.round_dec, args.start, args.end, args.debug)
                 used_files += 1
             except Exception as e:
                 skipped_cols += 1

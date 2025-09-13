@@ -2,4 +2,8 @@ data/
 out/
 '"'
 src/python/__pycache__/
+# Ignore Python cache files
+__pycache__/
+*.py
 webapp/data
+

@@ -3,30 +3,25 @@ set -e
 
 # --- Master Configuration ---
 # All results will go into this single directory
-export MASTER_OUTPUT="out/Env_exp_meps2_preop_rednmc06_04"
+export MASTER_OUTPUT="out/Env_exp_meps2_preop_rednmc06_04_t2h2"
 
 # --- Experiment Configuration ---
-# Base names for experiments
-export EXP_A_BASE="meps2_preop_rednmc06mbr000"
-export EXP_B_BASE="meps2_preop_rednmc04mbr000"
-export EXP_A_NAME="REF"
-export EXP_B_NAME="rednmc04"
+export MONITOR_EXP_BASES="meps2_preop_rednmc06mbr000 meps2_preop_rednmc04mbr000 meps2_preop_rednmc06_t2h2mbr000"
+export MONITOR_EXP_NAMES="REF rednmc04 t2h2"
 
 # Names for Obsver (used in file names and python scripts)
-export OBSVER_EXP_A="${EXP_A_BASE}"
-export OBSVER_EXP_B="${EXP_B_BASE}"
-
-export MONITOR_EXP_A="${EXP_A_BASE}"
-export MONITOR_EXP_B="${EXP_B_BASE}"
+export OBSVER_EXP_BASES="meps2_preop_rednmc06mbr000 meps2_preop_rednmc04mbr000 meps2_preop_rednmc06_t2h2mbr000"
+export OBSVER_EXP_NAMES="REF rednmc04 t2h2"
 
 # --- Path Configuration ---
 # Paths for Obsver data
 export OBSVER_PATH_A="data/obsver/${MONITOR_EXP_A}"
 export OBSVER_PATH_B="data/obsver/${MONITOR_EXP_B}"
+export OBSVER_PATH_C="data/obsver/${MONITOR_EXP_C}"
 
 # --- Date/Time Configuration ---
 export START="2025070200"
-export END="2025070321"
+export END="2025071321"
 export FCINT=12
 
 # --- Obsver Specific Configuration ---
@@ -34,16 +29,17 @@ export OBSVARS="atms_tb amsua_tb" # mhs_tb mwhs2_tb airep_t airep_u airep_v asca
 export OBSVER_HOURS="03 06 09 12 15 18 21 24"
 export USE_COMMON_KEYS=1
 export ROUND_DEC=2
-export EXP_COLORS="#1f77b4 #d62728"
+export EXP_COLORS="#1f77b4 #d62728 #2ca02c"
 export GENERATE_LEADTIME_PLOTS=0 # Set to 0 to disable per-lead-time plots in obsver
+export MONITOR_TEMP_CYCLES="6"
 
 
 # ==================================================
 #         STARTING COMPLETE VERIFICATION SUITE
 # ==================================================
 echo "Cleaning and creating master output at: ${MASTER_OUTPUT}"
-rm -rf "$MASTER_OUTPUT"
-mkdir -p "$MASTER_OUTPUT"
+rm -rf "${MASTER_OUTPUT}"
+mkdir -p "${MASTER_OUTPUT}"
 
 # --- Run Monitor Verification ---
 echo -e "\n----- Running Monitor Workflow -----"
