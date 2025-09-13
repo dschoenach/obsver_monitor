@@ -6,10 +6,10 @@ set -e
 BASE_OUTDIR="${MONITOR_OUTPUT:-out/verification_run_monitor}"
 read -r -a EXPS <<< "${MONITOR_EXP_BASES:-meps2_preop_rednmc06mbr000 meps2_preop_rednmc04mbr000}"
 read -r -a EXP_NAMES <<< "${MONITOR_EXP_NAMES:-REF rednmc04}"
-START="${START:-2025070200}"
-END="${END:-2025073121}"
-FCINT="${FCINT:-12}"
-EXP_COLORS_STR="${EXP_COLORS:-#1f77b4 #d62728}"
+START="${START_MONITOR:-2025070200}"
+END="${END_MONITOR:-2025073121}"
+FCINT="${FCINT_MONITOR:-12}"
+EXP_COLORS_STR="${EXP_COLORS_MONITOR:-#1f77b4 #d62728}"
 
 # NEW: Common key restriction controls
 RESTRICT_COMMON_KEYS="${RESTRICT_COMMON_KEYS:-1}"   # 1=enable, 0=disable

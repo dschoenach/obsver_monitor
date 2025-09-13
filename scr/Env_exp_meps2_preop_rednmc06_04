@@ -8,33 +8,34 @@ export MASTER_OUTPUT="out/Env_exp_meps2_preop_rednmc06_04_t2h2"
 # --- Experiment Configuration ---
 export MONITOR_EXP_BASES="meps2_preop_rednmc06mbr000 meps2_preop_rednmc04mbr000 meps2_preop_rednmc06_t2h2mbr000"
 export MONITOR_EXP_NAMES="REF rednmc04 t2h2"
+export EXP_COLORS_MONITOR="#0072B2 #E69F00 #009E73" # number must be the same as Experiments
+#0072B2 (blue)
+#E69F00 (orange)
+#009E73 (teal/green)
+# --- Date/Time Configuration ---
+export START_MONITOR="2025070200"
+export END_MONITOR="2025071321"
+export FCINT_MONITOR=12
 
 # Names for Obsver (used in file names and python scripts)
 export OBSVER_EXP_BASES="meps2_preop_rednmc06mbr000 meps2_preop_rednmc04mbr000 meps2_preop_rednmc06_t2h2mbr000"
 export OBSVER_EXP_NAMES="REF rednmc04 t2h2"
-
-# --- Path Configuration ---
-# Paths for Obsver data
-export OBSVER_PATH_A="data/obsver/${MONITOR_EXP_A}"
-export OBSVER_PATH_B="data/obsver/${MONITOR_EXP_B}"
-export OBSVER_PATH_C="data/obsver/${MONITOR_EXP_C}"
+export EXP_COLORS_OBSVER="#0072B2 #E69F00 #009E73" # number must be the same as MONITOR Experiments
 
 # --- Date/Time Configuration ---
-export START="2025070200"
-export END="2025071321"
-export FCINT=12
+export START_OBSVER="2025070200"
+export END_OBSVER="2025071321"
+export FCINT_OBSVER=12
+
+# Monitor specific settings
+export MONITOR_TEMP_CYCLES="6" # which observations in the monitor-temp profile and timeseries plots, every 6th hour
 
 # --- Obsver Specific Configuration ---
 export OBSVARS="atms_tb amsua_tb" # mhs_tb mwhs2_tb airep_t airep_u airep_v ascat_dd ascat_ff temp_q temp_t temp_u temp_v"
 export OBSVER_HOURS="03 06 09 12 15 18 21 24"
 export USE_COMMON_KEYS=1
 export ROUND_DEC=2
-export EXP_COLORS="#0072B2 #E69F00 #009E73"
-#0072B2 (blue)
-#E69F00 (orange)
-#009E73 (teal/green)
 export GENERATE_LEADTIME_PLOTS=0 # Set to 0 to disable per-lead-time plots in obsver
-export MONITOR_TEMP_CYCLES="6"
 
 
 # ==================================================
