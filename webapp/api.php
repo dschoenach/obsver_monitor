@@ -67,7 +67,7 @@ if ($action === 'get_projects') {
                 }
                 $cleaned_plot_type = str_replace('combined_', '', $cleaned_plot_type);
 
-                $response[$project][$var_name][$cleaned_plot_type] = str_replace($webapp_root_path . '/', '', $file);
+                $response[$project][$var_name][$cleaned_plot_type] = 'image.php?path=' . str_replace($data_root, '', $file);
             }
         }
 
@@ -79,7 +79,7 @@ if ($action === 'get_projects') {
                 if (!isset($response[$project]['Scorecards'])) {
                     $response[$project]['Scorecards'] = [];
                 }
-                $response[$project]['Scorecards'][$filename] = str_replace($webapp_root_path . '/', '', $file);
+                $response[$project]['Scorecards'][$filename] = 'image.php?path=' . str_replace($data_root, '', $file);
             }
         }
     }

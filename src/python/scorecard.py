@@ -29,7 +29,7 @@ def plot_scorecard(df: pl.DataFrame, outdir: str, title: str, exp_names: list[st
         per_vt = (df.group_by([c for c in collapse if c in df.columns])
                     .agg(pl.mean("rmse").alias("rmse")))
         wide = per_vt.pivot(index=["obstypevar", "lead_time", "vt_hour"],
-                            columns="experiment",
+                            on="experiment",
                             values="rmse")
         for e in exp_names:
             if e not in wide.columns:
@@ -62,7 +62,7 @@ def plot_scorecard(df: pl.DataFrame, outdir: str, title: str, exp_names: list[st
         agg = (df.group_by(["obstypevar", "lead_time", "experiment"])
                  .agg(pl.mean("rmse").alias("rmse")))
         pivot_df = agg.pivot(index=["obstypevar", "lead_time"],
-                             columns="experiment",
+                             on="experiment",
                              values="rmse")
         for e in exp_names:
             if e not in pivot_df.columns:
@@ -128,12 +128,22 @@ def plot_scorecard(df: pl.DataFrame, outdir: str, title: str, exp_names: list[st
         if var_significant_mask.any():
             values_to_scale = df_plot.loc[var_significant_mask, 'rmse_diff'].abs()
             if not values_to_scale.empty:
-                df_plot.loc[var_significant_mask, 'plot_alpha'] = minmax_scale(
-                    values_to_scale, feature_range=(0.5, 1.0)
-                )
+                # If all values are the same, minmax_scale produces NaN. Handle this.
+                if values_to_scale.min() == values_to_scale.max():
+                    df_plot.loc[var_significant_mask, 'plot_alpha'] = 0.75  # Assign a mid-range alpha
+                else:
+                    df_plot.loc[var_significant_mask, 'plot_alpha'] = minmax_scale(
+                        values_to_scale, feature_range=(0.5, 1.0)
+                    )
 
     # Assign fixed, low alpha for all non-significant values
     df_plot.loc[~significant_mask, 'plot_alpha'] = 0.25
+
+    # Ensure no NaN values are left in plot_alpha as a safeguard
+    df_plot['plot_alpha'] = df_plot['plot_alpha'].fillna(0.25)
+
+    # Clip values to handle potential floating point inaccuracies from scaling
+    df_plot['plot_alpha'] = df_plot['plot_alpha'].clip(0.0, 1.0)
 
     # Property 2: Border color
     df_plot['border_color'] = np.where(df_plot['is_significant'], 'black', 'none')

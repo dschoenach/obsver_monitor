@@ -3,12 +3,12 @@ set -e
 
 # --- Master Configuration ---
 # All results will go into this single directory
-export MASTER_OUTPUT="webapp/out/unified_verification"
+export MASTER_OUTPUT="out/unified_verification"
 
 # --- Experiment Configuration ---
 # Base names for experiments
-export EXP_A_BASE="meps2_preop_rednmc06"
-export EXP_B_BASE="meps2_preop_rednmc06_t2h2"
+export EXP_A_BASE="meps2_preop_rednmc06mbr000"
+export EXP_B_BASE="meps2_preop_rednmc06_t2h2mbr000"
 export EXP_A_NAME="REF"
 export EXP_B_NAME="t2h2"
 
@@ -16,9 +16,8 @@ export EXP_B_NAME="t2h2"
 export OBSVER_EXP_A="${EXP_A_BASE}"
 export OBSVER_EXP_B="${EXP_B_BASE}"
 
-# Names for Monitor (often has 'mbr000' suffix)
-export MONITOR_EXP_A="${EXP_A_BASE}mbr000"
-export MONITOR_EXP_B="${EXP_B_BASE}mbr000"
+export MONITOR_EXP_A="${EXP_A_BASE}"
+export MONITOR_EXP_B="${EXP_B_BASE}"
 
 # --- Path Configuration ---
 # Paths for Obsver data
@@ -65,5 +64,7 @@ echo "=================================================="
 
 pwd
 rm -rf '"'
-
-
+# full path of MASTER_OUTPUT
+echo "Open locally with:"
+FULL_MASTER_OUTPUT=$(realpath ${MASTER_OUTPUT})
+echo VERIF_DATA_PATH="${FULL_MASTER_OUTPUT}" php -S localhost:8000 -t webapp

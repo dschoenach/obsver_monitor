@@ -26,7 +26,7 @@ export OBSVER_PATH_B="data/obsver/${MONITOR_EXP_B}"
 
 # --- Date/Time Configuration ---
 export START="2025070200"
-export END="2025080321"
+export END="2025070321"
 export FCINT=12
 
 # --- Obsver Specific Configuration ---
@@ -64,4 +64,7 @@ echo "=================================================="
 
 pwd
 rm -rf '"'
-php -S http://localhost:8000/?datapath=${MASTER_OUTPUT}
+# full path of MASTER_OUTPUT
+echo "Open locally with:"
+FULL_MASTER_OUTPUT=$(realpath ${MASTER_OUTPUT})
+echo VERIF_DATA_PATH="${FULL_MASTER_OUTPUT}" php -S localhost:8000 -t webapp
