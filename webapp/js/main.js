@@ -211,6 +211,11 @@ $(document).ready(function() {
         setActive('plotType', $(this).data('plottype'));
     });
 
+    // --- Plot Zoom Handler ---
+    $(document).on('click', '#plot-display', function() {
+        $(this).toggleClass('zoomed');
+    });
+
     // --- Data Fetching ---
     function fetchScorecardData(projectName) {
         $('#scorecard-title').text(`Scorecard Data for: ${projectName}`);

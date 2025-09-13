@@ -69,8 +69,15 @@ header h1 {
 }
 
 #plot-display {
-    max-width: 100%;
+    max-width: 50%;
     border: 1px solid #ccc;
+    cursor: zoom-in;
+    transition: max-width 0.2s ease-in-out;
+}
+
+#plot-display.zoomed {
+    max-width: 100%;
+    cursor: zoom-out;
 }
 
 table {
