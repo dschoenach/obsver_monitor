@@ -25,15 +25,15 @@
                     <h2>Variables</h2>
                     <!-- Variables will be loaded here -->
                 </nav>
-                <nav id="plottype-nav">
+                <nav id="plottype-nav" style="display: none;">
                     <h2>Plot Types</h2>
-                    <!-- Plot types will be loaded here -->
+                    <!-- This is now hidden and unused -->
                 </nav>
             </aside>
 
             <main class="content">
                 <div id="plot-container">
-                    <img id="plot-display" src="" alt="Select a project and plot to display.">
+                    <img id="plot-display" class="plot-display" src="" alt="Select a project and plot to display.">
                 </div>
                 <hr>
                 <h2 id="scorecard-title">Scorecard Data</h2>

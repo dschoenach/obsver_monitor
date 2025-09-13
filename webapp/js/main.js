@@ -3,8 +3,19 @@ $(document).ready(function() {
     let activeSelections = {
         project: null,
         category: null,
-        variable: null,
-        plotType: null
+        variable: null
+    };
+
+    const categoryMap = {
+        monitor: {
+            'FCVER': 'lead_time_series',
+            'FCTS': 'vt_hour_series',
+            'TEMPPROF': 'profile'
+        },
+        obsver: {
+            'PROF': 'profile',
+            'TS': 'timeseries'
+        }
     };
 
     // --- 1. Fetch ALL Project Data on page load ---
@@ -14,11 +25,7 @@ $(document).ready(function() {
             return;
         }
         projectData = data;
-        
-        // Initial population of the page
         populateProjects(Object.keys(projectData));
-        
-        // Set default project to 'monitor' or the first available one
         const defaultProject = projectData.monitor ? 'monitor' : Object.keys(projectData)[0];
         if (defaultProject) {
             setActive('project', defaultProject);
@@ -37,155 +44,137 @@ $(document).ready(function() {
     function populateCategories(project) {
         const nav = $('#category-nav');
         nav.empty().append('<h2>Categories</h2>');
-        const allVars = projectData[project] || {};
-        let categories = new Set();
-
-        // Dynamically determine categories based on variable names and special cases
-        Object.keys(allVars).forEach(v => {
-            if (v === 'Scorecards') {
-                categories.add('Scorecards');
-            } else if (project === 'obsver') {
-                categories.add('Plots');
-            } else {
-                // Logic for other projects like 'monitor'
-                if (v.toLowerCase().includes('profile')) {
-                    categories.add('Profiles');
-                } else if (v.toLowerCase().includes('timeseries')) {
-                    categories.add('Timeseries');
-                } else if (v.toLowerCase().includes('temp')) {
-                    categories.add('Temp_Profiles');
-                } else {
-                    // For monitor, default to Synop_Surface
-                    categories.add('Synop_Surface');
-                }
-            }
-        });
-
-        // Ensure Scorecards is last if it exists
-        const sortedCategories = Array.from(categories).sort((a, b) => {
-            if (a === 'Scorecards') return 1;
-            if (b === 'Scorecards') return -1;
-            return a.localeCompare(b);
-        });
-
-        sortedCategories.forEach(c => {
+        let categories = project === 'monitor' 
+            ? ['FCVER', 'FCTS', 'TEMPPROF', 'Scorecards'] 
+            : ['PROF', 'TS', 'Scorecards'];
+        
+        categories.forEach(c => {
             nav.append(`<a href="#" data-category="${c}">${c}</a>`);
         });
     }
 
     function populateVariables(project, category) {
         const nav = $('#variable-nav');
-        nav.empty().append('<h2>Variables</h2>');
+        nav.empty().append('<h2><a href="#" id="variables-header">Variables</a></h2>');
         const allVars = projectData[project] || {};
         let relevantVars = [];
 
         if (category === 'Scorecards') {
-            if (allVars['Scorecards']) {
-                relevantVars = ['Scorecards'];
+            relevantVars = Object.keys(allVars['Scorecards'] || {});
+        } else {
+            const plotType = categoryMap[project]?.[category];
+            if (plotType) {
+                Object.keys(allVars).forEach(variable => {
+                    if (
+                        variable !== 'Scorecards' &&
+                        allVars[variable] &&
+                        allVars[variable][plotType]
+                    ) {
+                        relevantVars.push(variable);
+                    }
+                });
             }
-        } else if (category === 'Profiles') {
-            relevantVars = Object.keys(allVars).filter(v => v.toLowerCase().includes('profile'));
-        } else if (category === 'Timeseries') {
-            relevantVars = Object.keys(allVars).filter(v => v.toLowerCase().includes('timeseries'));
-        } else if (category === 'Synop_Surface' || category === 'Plots') {
-            relevantVars = Object.keys(allVars).filter(v => 
-                v !== 'Scorecards' && 
-                !v.toLowerCase().includes('temp') &&
-                !v.toLowerCase().includes('profile') &&
-                !v.toLowerCase().includes('timeseries')
-            );
-        } else if (category === 'Temp_Profiles') {
-            relevantVars = Object.keys(allVars).filter(v => v.toLowerCase().includes('temp'));
         }
 
         relevantVars.sort().forEach(v => {
             nav.append(`<a href="#" data-variable="${v}">${v}</a>`);
         });
+
+        return relevantVars;
     }
 
-    function populatePlotTypes(project, variable) {
-        const nav = $('#plottype-nav');
-        nav.empty().append('<h2>Plot Types</h2>');
-        const plots = projectData[project]?.[variable] || {};
-        Object.keys(plots).sort().forEach(pt => {
-            nav.append(`<a href="#" data-plottype="${pt}">${pt}</a>`);
-        });
+    // Helper: find first category that has at least one variable (in order)
+    function findFirstCategoryAndVariable(project) {
+        const categories = project === 'monitor'
+            ? ['FCVER', 'FCTS', 'TEMPPROF', 'Scorecards']
+            : ['PROF', 'TS', 'Scorecards'];
+
+        for (const cat of categories) {
+            if (cat === 'Scorecards') {
+                const scVars = Object.keys(projectData[project]?.Scorecards || {}).sort();
+                if (scVars.length) return { category: cat, variable: scVars[0] };
+            } else {
+                const plotType = categoryMap[project]?.[cat];
+                if (!plotType) continue;
+                const vars = Object.keys(projectData[project] || {})
+                    .filter(v => v !== 'Scorecards' && projectData[project][v]?.[plotType])
+                    .sort();
+                if (vars.length) return { category: cat, variable: vars[0] };
+            }
+        }
+        return { category: null, variable: null };
     }
 
     // --- State Management & Rendering ---
     function setActive(type, value) {
-        console.log(`Setting active ${type}: ${value}`);
         activeSelections[type] = value;
 
-        // Cascade resets and updates
         switch (type) {
             case 'project':
                 activeSelections.category = null;
                 activeSelections.variable = null;
-                activeSelections.plotType = null;
                 populateCategories(value);
                 fetchScorecardData(value);
+
+                const first = findFirstCategoryAndVariable(value);
+                if (first.category) {
+                    activeSelections.category = first.category;
+                    const vars = populateVariables(value, first.category);
+                    // Trust the helper’s variable if still present, else fallback
+                    activeSelections.variable = first.variable && vars.includes(first.variable)
+                        ? first.variable
+                        : (vars[0] || null);
+                } else {
+                    // No categories with variables
+                    $('#variable-nav').empty().append('<h2>Variables</h2>');
+                }
                 break;
+
             case 'category':
                 activeSelections.variable = null;
-                activeSelections.plotType = null;
-                populateVariables(activeSelections.project, value);
+                const vars = populateVariables(activeSelections.project, value);
+                if (vars.length) {
+                    activeSelections.variable = vars[0];
+                }
                 break;
+
             case 'variable':
-                activeSelections.plotType = null;
-                populatePlotTypes(activeSelections.project, value);
+                // Direct selection, nothing else
                 break;
-            case 'plotType':
-                break; // No downstream updates
         }
+
         renderUI();
     }
 
     function renderUI() {
-        // Update active classes for links
         updateActiveLinks('#project-nav', 'project', 'project');
         updateActiveLinks('#category-nav', 'category', 'category');
         updateActiveLinks('#variable-nav', 'variable', 'variable');
-        updateActiveLinks('#plottype-nav', 'plottype', 'plotType');
 
-        // Auto-select first item if not set
-        if (activeSelections.project && !activeSelections.category) {
-            const firstCategory = $('#category-nav a:first').data('category');
-            if (firstCategory) setActive('category', firstCategory);
-            return; // Return to allow cascade
-        }
-        if (activeSelections.category && !activeSelections.variable) {
-            const firstVar = $('#variable-nav a:first').data('variable');
-            if (firstVar) setActive('variable', firstVar);
-            return; 
-        }
-        if (activeSelections.variable && !activeSelections.plotType) {
-            const firstPlot = $('#plottype-nav a:first').data('plottype');
-            if (firstPlot) setActive('plotType', firstPlot);
-            return;
-        }
+        const plotContainer = $('#plot-container');
+        plotContainer.empty();
 
-        // Display plot if everything is selected
-        if (activeSelections.project && activeSelections.variable && activeSelections.plotType) {
-            // Special handling for Scorecards which might not have a plotType but should show an image
-            if (activeSelections.category === 'Scorecards' && activeSelections.variable === 'Scorecards') {
-                 const scorecardPlots = projectData[activeSelections.project]['Scorecards'];
-                 const imagePath = scorecardPlots[activeSelections.plotType];
-                 $('#plot-display').attr('src', imagePath).show();
-                 $('#scorecard-table-container').show();
-                 $('#scorecard-title').show();
+        if (activeSelections.variable) {
+            let imagePath;
+            if (activeSelections.category === 'Scorecards') {
+                imagePath = projectData[activeSelections.project]['Scorecards'][activeSelections.variable];
+                $('#scorecard-table-container').show();
+                $('#scorecard-title').show();
             } else {
-                const imagePath = projectData[activeSelections.project][activeSelections.variable][activeSelections.plotType];
-                $('#plot-display').attr('src', imagePath).show();
-                // Hide scorecard table if not in scorecard category
+                const plotType = categoryMap[activeSelections.project]?.[activeSelections.category];
+                imagePath = projectData[activeSelections.project]?.[activeSelections.variable]?.[plotType];
                 $('#scorecard-table-container').hide();
                 $('#scorecard-title').hide();
             }
+
+            if (imagePath) {
+                const img = $('<img>').addClass('plot-display').attr('src', imagePath).show();
+                plotContainer.append(img);
+            } else {
+                plotContainer.html('<p>Plot not found for this selection.</p>');
+            }
         } else {
-            $('#plot-display').attr('src', '').hide();
-             // Also hide scorecard table if not fully selected
-            $('#scorecard-table-container').hide();
-            $('#scorecard-title').hide();
+            plotContainer.html('<p>No variable available.</p>');
         }
     }
     
@@ -200,29 +189,47 @@ $(document).ready(function() {
     }
 
     // --- Event Handlers ---
-    $(document).on('click', '#project-nav a', function(e) {
+    $(document).on('click', '#project-nav a', function(e) { e.preventDefault(); setActive('project', $(this).data('project')); });
+    $(document).on('click', '#category-nav a', function(e) { e.preventDefault(); setActive('category', $(this).data('category')); });
+    $(document).on('click', '#variable-nav a', function(e) { e.preventDefault(); setActive('variable', $(this).data('variable')); });
+
+    $(document).on('click', '#variables-header', function(e) {
         e.preventDefault();
-        setActive('project', $(this).data('project'));
-    });
-    $(document).on('click', '#category-nav a', function(e) {
-        e.preventDefault();
-        setActive('category', $(this).data('category'));
-    });
-    $(document).on('click', '#variable-nav a', function(e) {
-        e.preventDefault();
-        setActive('variable', $(this).data('variable'));
-    });
-    $(document).on('click', '#plottype-nav a', function(e) {
-        e.preventDefault();
-        setActive('plotType', $(this).data('plottype'));
+        const { project, category } = activeSelections;
+        if (!project || !category) return;
+
+        const plotContainer = $('#plot-container');
+        plotContainer.empty().css('text-align', 'left');
+        let plotsFound = 0;
+
+        $('#variable-nav a').each(function() {
+            const variable = $(this).data('variable');
+            let imagePath;
+
+            if (category === 'Scorecards') {
+                imagePath = projectData[project]['Scorecards'][variable];
+            } else {
+                const plotType = categoryMap[project]?.[category];
+                imagePath = projectData[project]?.[variable]?.[plotType];
+            }
+
+            if (imagePath) {
+                const plotTitle = $('<h3>').text(variable);
+                const img = $('<img>').attr('src', imagePath).addClass('plot-display');
+                plotContainer.append(plotTitle).append(img);
+                plotsFound++;
+            }
+        });
+
+        if (plotsFound === 0) {
+            plotContainer.html('<p>No plots found for this group.</p>').css('text-align', 'center');
+        }
     });
 
-    // --- Plot Zoom Handler ---
-    $(document).on('click', '#plot-display', function() {
+    $(document).on('click', '.plot-display', function() {
         $(this).toggleClass('zoomed');
     });
 
-    // --- Data Fetching ---
     function fetchScorecardData(projectName) {
         $('#scorecard-title').text(`Scorecard Data for: ${projectName}`);
         $.getJSON(`api.php?action=get_scorecard_data&project=${projectName}`, function(data) {
