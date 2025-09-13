@@ -69,3 +69,40 @@ rm -rf '"'
 echo "Open locally with:"
 FULL_MASTER_OUTPUT=$(realpath ${MASTER_OUTPUT})
 echo VERIF_DATA_PATH="${FULL_MASTER_OUTPUT}" php -S localhost:8000 -t webapp
+
+# --- Generate Static Webapp ---
+echo -e "
+----- Generating Static Webapp -----"
+WEBAPP_OUTPUT="${MASTER_OUTPUT}_webapp"
+echo "Creating static webapp at: ${WEBAPP_OUTPUT}"
+rm -rf "${WEBAPP_OUTPUT}"
+mkdir -p "${WEBAPP_OUTPUT}"
+
+# Generate JSON data
+VERIF_DATA_PATH="${FULL_MASTER_OUTPUT}" php webapp/api.php > "${WEBAPP_OUTPUT}/projects.json"
+VERIF_DATA_PATH="${FULL_MASTER_OUTPUT}" php webapp/api.php -- --action get_scorecard_data --project monitor > "${WEBAPP_OUTPUT}/monitor_scorecard.json"
+VERIF_DATA_PATH="${FULL_MASTER_OUTPUT}" php webapp/api.php -- --action get_scorecard_data --project obsver > "${WEBAPP_OUTPUT}/obsver_scorecard.json"
+
+# Copy webapp files
+cp webapp/index.php "${WEBAPP_OUTPUT}/index.html"
+mkdir -p "${WEBAPP_OUTPUT}/js"
+cp webapp/js/main.js "${WEBAPP_OUTPUT}/js/main.js"
+mkdir -p "${WEBAPP_OUTPUT}/css"
+cp webapp/css/style.css "${WEBAPP_OUTPUT}/css/style.css"
+
+# Copy images
+cp -r "${MASTER_OUTPUT}/monitor" "${WEBAPP_OUTPUT}/"
+cp -r "${MASTER_OUTPUT}/obsver" "${WEBAPP_OUTPUT}/"
+
+# Modify files for static hosting
+sed -i 's/image.php?path=//g' "${WEBAPP_OUTPUT}/projects.json"
+sed -i 's#\\/#/#g' "${WEBAPP_OUTPUT}/projects.json"
+sed -i "s/api.php?action=get_projects/projects.json/g" "${WEBAPP_OUTPUT}/js/main.js"
+sed -i 's|api.php?action=get_scorecard_data&project=${projectName}|${projectName}_scorecard.json|g' "${WEBAPP_OUTPUT}/js/main.js"
+
+echo -e "
+=================================================="
+echo "    STATIC WEBAPP GENERATED"
+echo "    Results are in: ${WEBAPP_OUTPUT}"
+echo "=================================================="
+
