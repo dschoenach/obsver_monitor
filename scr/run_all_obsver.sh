@@ -9,6 +9,8 @@ EXPPATHS=("${OBSVER_PATH_A:-data/obsver/meps2_preop_rednmc06mbr000}" "${OBSVER_P
 OBSVARS_STR="${OBSVARS:-atms_tb}"
 # No eval needed here, can be read directly into an array
 read -r -a OBSVARS <<< "$OBSVARS_STR"
+OBSVER_HOURS_STR="${OBSVER_HOURS:-}"
+read -r -a OBSVER_HOURS <<< "$OBSVER_HOURS_STR"
 
 USE_COMMON_KEYS="${USE_COMMON_KEYS:-0}"
 START="${START:-2025070200}"
@@ -130,14 +132,21 @@ PY
 
   ALL_LEAD_TIMES_PER_VAR+=("$LTS")
 
+  HOURS_ARG=()
+  if [[ ${#OBSVER_HOURS[@]} -gt 0 ]]; then
+    HOURS_ARG+=(--hours ${OBSVER_HOURS[@]})
+  fi
+
   python3 -m src.python.joint_plotting \
     --metrics "${METRICS_FILES[@]}" \
     --outdir "${OV_PLOT_DIR}" \
     --title-prefix "${OBSTYPEVAR}" \
     --start-date "$START" \
     --end-date "$END" \
+    --fcint "$FCINT" \
     "${COLOR_ARGS[@]}" \
-    "${NAME_ARGS[@]}" &
+    "${NAME_ARGS[@]}" \
+    "${HOURS_ARG[@]}" &
 
   # Per-lead-time plots
   if [[ "${GENERATE_LEADTIME_PLOTS}" -eq 1 ]]; then
@@ -150,8 +159,10 @@ PY
           --lead-time "${LT}" \
           --start-date "$START" \
           --end-date "$END" \
+          --fcint "$FCINT" \
           "${COLOR_ARGS[@]}" \
-          "${NAME_ARGS[@]}" &
+          "${NAME_ARGS[@]}" \
+          "${HOURS_ARG[@]}" &
       done
     fi
   else

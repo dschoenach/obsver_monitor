@@ -1,7 +1,7 @@
 import argparse, os
 import polars as pl
 import matplotlib.pyplot as plt
-from typing import Dict
+from typing import Dict, List, Optional
 
 BRACKET_MIDPOINTS: Dict[str, int] = {
     "1050-950": 1000, "950-850": 900, "850-750": 800, "750-650": 700,
@@ -15,30 +15,36 @@ METRIC_STYLES = {
 }
 
 def _aggregate_profile(df: pl.DataFrame) -> pl.DataFrame:
-    return (df.group_by(["experiment", "pressure_bracket"])
-              .agg([
-                  pl.mean("bias").alias("bias"),
-                  pl.mean("rmse").alias("rmse"),
-                  pl.sum("n").alias("n_sum")
-              ]))
+    return (
+        df.group_by(["experiment", "pressure_bracket"])
+        .agg([
+            pl.mean("bias").alias("bias"),
+            pl.mean("rmse").alias("rmse"),
+            pl.sum("n").alias("n_sum")
+        ])
+    )
 
 def _aggregate_tb_profile(df: pl.DataFrame) -> pl.DataFrame:
-    return (df.group_by(["experiment", "channel"])
-              .agg([
-                  pl.mean("bias").alias("bias"),
-                  pl.mean("rmse").alias("rmse"),
-                  pl.sum("n").alias("n_sum")
-              ]))
+    return (
+        df.group_by(["experiment", "channel"])
+        .agg([
+            pl.mean("bias").alias("bias"),
+            pl.mean("rmse").alias("rmse"),
+            pl.sum("n").alias("n_sum")
+        ])
+    )
 
 def _aggregate_timeseries(df: pl.DataFrame) -> pl.DataFrame:
-    return (df.group_by(["experiment", "vt_hour"])
-              .agg([
-                  pl.mean("bias").alias("bias"),
-                  pl.mean("rmse").alias("rmse"),
-                  pl.sum("n").alias("n_sum")
-              ]))
+    return (
+        df.group_by(["experiment", "vt_hour"])
+        .agg([
+            pl.mean("bias").alias("bias"),
+            pl.mean("rmse").alias("rmse"),
+            pl.sum("n").alias("n_sum")
+        ])
+    )
 
-def plot_combined_tb_profiles(df: pl.DataFrame, outdir: str, title_prefix: str, exp_colors: Dict[str, str], exp_names: Dict[str, str], lead_time_str: str, start_date: str, end_date: str) -> None:
+def plot_combined_tb_profiles(df: pl.DataFrame, outdir: str, title_prefix: str, exp_colors: Dict[str, str], exp_names: Dict[str, str], lead_time_str: str, start_date: str, end_date: str, cycle_hours: List[int], hours: Optional[List[str]]) -> None:
     agg = _aggregate_tb_profile(df)
     counts = (
         agg.group_by("channel")
@@ -85,6 +91,13 @@ def plot_combined_tb_profiles(df: pl.DataFrame, outdir: str, title_prefix: str, 
     title = f"{title_prefix} - Vertical Profiles"
     if start_date and end_date:
         title += f"\n{start_date} - {end_date}"
+    if cycle_hours:
+        fcint_hours = ", ".join(f"{h:02d}" for h in cycle_hours)
+        title_line3 = f"{fcint_hours} UTC"
+        if hours:
+            hours_str = ", ".join(hours)
+            title_line3 += f" + {{{hours_str}}}"
+        title += f"\n{title_line3}"
     ax.set_title(title)
     ax.set_xlabel("Value")
     ax.set_ylabel("Channel")
@@ -96,7 +109,7 @@ def plot_combined_tb_profiles(df: pl.DataFrame, outdir: str, title_prefix: str, 
     plt.close(fig)
     print(f"Saved plot: {path}")
 
-def plot_combined_profiles(df: pl.DataFrame, outdir: str, title_prefix: str, exp_colors: Dict[str, str], exp_names: Dict[str, str], lead_time_str: str, start_date: str, end_date: str) -> None:
+def plot_combined_profiles(df: pl.DataFrame, outdir: str, title_prefix: str, exp_colors: Dict[str, str], exp_names: Dict[str, str], lead_time_str: str, start_date: str, end_date: str, cycle_hours: List[int], hours: Optional[List[str]]) -> None:
     mapping_df = pl.DataFrame({
         "pressure_bracket": list(BRACKET_MIDPOINTS.keys()),
         "pressure_midpoint": list(BRACKET_MIDPOINTS.values())
@@ -147,6 +160,13 @@ def plot_combined_profiles(df: pl.DataFrame, outdir: str, title_prefix: str, exp
     title = f"{title_prefix} - Vertical Profiles"
     if start_date and end_date:
         title += f"\n{start_date} - {end_date}"
+    if cycle_hours:
+        fcint_hours = ", ".join(f"{h:02d}" for h in cycle_hours)
+        title_line3 = f"{fcint_hours} UTC"
+        if hours:
+            hours_str = ", ".join(hours)
+            title_line3 += f" + {{{hours_str}}}"
+        title += f"\n{title_line3}"
     ax.set_title(title)
     ax.set_xlabel("Value")
     ax.set_ylabel("Pressure (hPa)")
@@ -160,7 +180,7 @@ def plot_combined_profiles(df: pl.DataFrame, outdir: str, title_prefix: str, exp
     plt.close(fig)
     print(f"Saved plot: {path}")
 
-def plot_combined_timeseries(df: pl.DataFrame, outdir: str, title_prefix: str, exp_colors: Dict[str, str], exp_names: Dict[str, str], lead_time: str, start_date: str, end_date: str) -> None:
+def plot_combined_timeseries(df: pl.DataFrame, outdir: str, title_prefix: str, exp_colors: Dict[str, str], exp_names: Dict[str, str], lead_time: str, start_date: str, end_date: str, cycle_hours: List[int], hours: Optional[List[str]]) -> None:
     agg = _aggregate_timeseries(df).sort("vt_hour")
     counts = (
         agg.group_by("vt_hour")
@@ -207,6 +227,13 @@ def plot_combined_timeseries(df: pl.DataFrame, outdir: str, title_prefix: str, e
     title = f"{title_prefix} - Time Series"
     if start_date and end_date:
         title += f"\n{start_date} - {end_date}"
+    if cycle_hours:
+        fcint_hours = ", ".join(f"{h:02d}" for h in cycle_hours)
+        title_line3 = f"{fcint_hours} UTC"
+        if hours:
+            hours_str = ", ".join(hours)
+            title_line3 += f" + {{{hours_str}}}"
+        title += f"\n{title_line3}"
     ax.set_title(title)
     ax.set_xlabel("Valid Time")
     ax.set_ylabel("Value")
@@ -230,6 +257,8 @@ def main() -> None:
                         help="Experiment name mapping LONG_NAME=SHORT_NAME (repeatable).")
     parser.add_argument("--start-date", help="Start date for title.")
     parser.add_argument("--end-date", help="End date for title.")
+    parser.add_argument("--fcint", type=int, help="Forecast start time interval in hours. Not used for title.")
+    parser.add_argument("--hours", nargs="+", help="List of hours to filter data.")
     args = parser.parse_args()
     os.makedirs(args.outdir, exist_ok=True)
 
@@ -259,8 +288,14 @@ def main() -> None:
         return
     all_df = pl.concat(dfs, how="vertical_relaxed")
 
+    cycle_hours = sorted(all_df["cycle_hour"].unique().to_list())
+
     if args.lead_time is not None:
         all_df = all_df.filter(pl.col("lead_time") == args.lead_time)
+
+    if args.hours:
+        valid_hours = [int(h) for h in args.hours]
+        all_df = all_df.filter(pl.col("vt_hour").dt.hour().is_in(valid_hours))
 
     start_date = all_df["vt_hour"].min()
     end_date = all_df["vt_hour"].max()
@@ -294,10 +329,10 @@ def main() -> None:
     lead_time_str = f"_lt_{args.lead_time}" if args.lead_time is not None else ""
 
     if "channel" in all_df.columns:
-        plot_combined_tb_profiles(all_df, args.outdir, args.title_prefix, exp_colors, exp_names_map, lead_time_str, start_date, end_date)
+        plot_combined_tb_profiles(all_df, args.outdir, args.title_prefix, exp_colors, exp_names_map, lead_time_str, start_date, end_date, cycle_hours, args.hours)
     else:
-        plot_combined_profiles(all_df, args.outdir, args.title_prefix, exp_colors, exp_names_map, lead_time_str, start_date, end_date)
-    plot_combined_timeseries(all_df, args.outdir, args.title_prefix, exp_colors, exp_names_map, lead_time_str, start_date, end_date)
+        plot_combined_profiles(all_df, args.outdir, args.title_prefix, exp_colors, exp_names_map, lead_time_str, start_date, end_date, cycle_hours, args.hours)
+    plot_combined_timeseries(all_df, args.outdir, args.title_prefix, exp_colors, exp_names_map, lead_time_str, start_date, end_date, cycle_hours, args.hours)
 
 if __name__ == "__main__":
     main()
