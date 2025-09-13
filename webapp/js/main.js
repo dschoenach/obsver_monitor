@@ -44,14 +44,20 @@ $(document).ready(function() {
         Object.keys(allVars).forEach(v => {
             if (v === 'Scorecards') {
                 categories.add('Scorecards');
-            } else if (v.toLowerCase().includes('profile')) {
-                categories.add('Profiles');
-            } else if (v.toLowerCase().includes('timeseries')) {
-                categories.add('Timeseries');
-            } else if (v.toLowerCase().includes('temp')) {
-                categories.add('Temp_Profiles');
+            } else if (project === 'obsver') {
+                categories.add('Plots');
             } else {
-                categories.add(project === 'obsver' ? 'Plots' : 'Synop_Surface');
+                // Logic for other projects like 'monitor'
+                if (v.toLowerCase().includes('profile')) {
+                    categories.add('Profiles');
+                } else if (v.toLowerCase().includes('timeseries')) {
+                    categories.add('Timeseries');
+                } else if (v.toLowerCase().includes('temp')) {
+                    categories.add('Temp_Profiles');
+                } else {
+                    // For monitor, default to Synop_Surface
+                    categories.add('Synop_Surface');
+                }
             }
         });
 
