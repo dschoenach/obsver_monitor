@@ -1,6 +1,7 @@
 import argparse, os
 import polars as pl
 import matplotlib.pyplot as plt
+import matplotlib.ticker as mticker
 from typing import Dict, Optional, List
 
 METRIC_STYLES = {
@@ -152,9 +153,16 @@ def plot_series(df: pl.DataFrame, outdir: str, exp_colors: Dict[str, str], exp_n
         ax.set_title(title)
         ax.set_xlabel(x_label)
         ax.set_ylabel("Value")
-        ax.tick_params(axis='x', rotation=45)
-        ax.grid(True, linestyle="--", linewidth=0.5, alpha=0.7)
-        ax.legend(handles=line_handles, loc='center left', bbox_to_anchor=(1.14, 0.5), frameon=True)
+        # Match monitor_plotting.py x-axis tick density behavior
+        if x_axis == "vt_hour":
+            ax.xaxis.set_major_locator(mticker.MaxNLocator(nbins=10))
+        elif x_axis == "lead_time":
+            max_lead_time = df["lead_time"].max()
+            if max_lead_time is not None:
+                ax.set_xticks(range(0, max_lead_time + 1, 3))
+         ax.tick_params(axis='x', rotation=45)
+         ax.grid(True, linestyle="--", linewidth=0.5, alpha=0.7)
+         ax.legend(handles=line_handles, loc='center left', bbox_to_anchor=(1.14, 0.5), frameon=True)
 
         plot_dir = os.path.join(outdir, f"temp_{var}")
         os.makedirs(plot_dir, exist_ok=True)

@@ -191,15 +191,18 @@ done
 
 if [[ ${#METRICS_FILES[@]} -gt 0 && ${#EXPS[@]} -gt 1 ]]; then
   echo "Building scorecards from ${#METRICS_FILES[@]} metric files (vars: ${OBSVARS[*]})"
-  for i in $(seq 1 $((${#EXPS[@]} - 1))); do
-    python3 -m src.python.scorecard \
-      --exp-a "${EXPS[0]}" \
-      --exp-b "${EXPS[$i]}" \
-      --exp-a-name "${EXP_NAMES[0]}" \
-      --exp-b-name "${EXP_NAMES[$i]}" \
-      --metrics "${METRICS_FILES[@]}" \
-      --outdir "${PLOTS}" \
-      --title "Scorecard_${EXP_NAMES[0]}_vs_${EXP_NAMES[$i]}"
+  for i in $(seq 0 $((${#EXPS[@]} - 2))); do
+    for j in $(seq $(($i + 1)) $((${#EXPS[@]} - 1))); do
+      python3 -m src.python.scorecard \
+        --exp-a "${EXPS[$i]}" \
+        --exp-b "${EXPS[$j]}" \
+        --exp-a-name "${EXP_NAMES[$i]}" \
+        --exp-b-name "${EXP_NAMES[$j]}" \
+        --metrics "${METRICS_FILES[@]}" \
+        --fcint "${FCINT}" \
+        --outdir "${PLOTS}" \
+        --title "Scorecard_${EXP_NAMES[$i]}_vs_${EXP_NAMES[$j]}"
+    done
   done
 else
   echo "No metric files found or not enough experiments for scorecard; skipping scorecard."

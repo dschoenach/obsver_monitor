@@ -1,7 +1,10 @@
-import argparse, os
+import argparse
+import os
+import itertools
+from typing import Dict, List, Optional, Iterable, Tuple
+
 import polars as pl
 import matplotlib.pyplot as plt
-from typing import Dict, List, Optional
 
 BRACKET_MIDPOINTS: Dict[str, int] = {
     "1050-950": 1000, "950-850": 900, "850-750": 800, "750-650": 700,
@@ -10,277 +13,283 @@ BRACKET_MIDPOINTS: Dict[str, int] = {
 }
 
 METRIC_STYLES = {
-    "rmse": {"linestyle": "--", "label": "RMSE"},
-    "bias": {"linestyle": "-", "label": "Bias"}
+    "rmse": {"linestyle": "--", "label": "RMSE", "marker": "o"},
+    "bias": {"linestyle": "-", "label": "Bias", "marker": "s"},
 }
 
-def _aggregate_profile(df: pl.DataFrame) -> pl.DataFrame:
+# ---------------- Aggregations ---------------- #
+
+def _aggregate(df: pl.DataFrame, group_cols: List[str]) -> pl.DataFrame:
+    needed = {"experiment", *group_cols, "bias", "rmse", "n"}
+    missing = needed - set(df.columns)
+    if missing:
+        raise ValueError(f"Missing columns for aggregation: {missing}")
     return (
-        df.group_by(["experiment", "pressure_bracket"])
-        .agg([
-            pl.mean("bias").alias("bias"),
-            pl.mean("rmse").alias("rmse"),
-            pl.sum("n").alias("n_sum")
-        ])
+        df.group_by(["experiment", *group_cols])
+          .agg([
+              pl.mean("bias").alias("bias"),
+              pl.mean("rmse").alias("rmse"),
+              pl.sum("n").alias("n_sum"),
+          ])
     )
 
-def _aggregate_tb_profile(df: pl.DataFrame) -> pl.DataFrame:
-    return (
-        df.group_by(["experiment", "channel"])
-        .agg([
-            pl.mean("bias").alias("bias"),
-            pl.mean("rmse").alias("rmse"),
-            pl.sum("n").alias("n_sum")
-        ])
-    )
+# ---------------- Utilities ---------------- #
 
-def _aggregate_timeseries(df: pl.DataFrame) -> pl.DataFrame:
-    return (
-        df.group_by(["experiment", "vt_hour"])
-        .agg([
-            pl.mean("bias").alias("bias"),
-            pl.mean("rmse").alias("rmse"),
-            pl.sum("n").alias("n_sum")
-        ])
-    )
+def _parse_mapping(specs: Optional[Iterable[str]], label: str) -> Dict[str, str]:
+    out: Dict[str, str] = {}
+    if not specs:
+        return out
+    for spec in specs:
+        if "=" not in spec:
+            print(f"Ignoring malformed --{label} '{spec}' (need A=B).")
+            continue
+        k, v = spec.split("=", 1)
+        out[k] = v
+    return out
 
-def plot_combined_tb_profiles(df: pl.DataFrame, outdir: str, title_prefix: str, exp_colors: Dict[str, str], exp_names: Dict[str, str], lead_time_str: str, start_date: str, end_date: str, cycle_hours: List[int], hours: Optional[List[str]]) -> None:
-    agg = _aggregate_tb_profile(df)
-    counts = (
-        agg.group_by("channel")
-        .agg(pl.sum("n_sum").alias("n_all"))
-        .sort("channel")
-    )
-
-    fig, ax = plt.subplots(figsize=(15.0, 10.0))
-    plt.subplots_adjust(right=0.75)
-    ax2 = ax.twiny()
-    ax2.barh(counts["channel"], counts["n_all"], color="gray", alpha=0.15, height=0.8)
-    ax2.set_xlabel("Count")
-
-    line_handles = []
-    exps_in_order = list(exp_colors.keys())
-
-    for exp in exps_in_order:
-        sub = agg.filter(pl.col("experiment") == exp).sort("channel")
-        disp_name = exp_names.get(exp, exp)
-        h_rmse, = ax.plot(
-            sub["rmse"],
-            sub["channel"],
-            color=exp_colors[exp],
-            linestyle=METRIC_STYLES["rmse"]["linestyle"],
-            marker="o",
-            label=f"RMSE {disp_name}",
-        )
-        line_handles.append(h_rmse)
-
-    for exp in exps_in_order:
-        sub = agg.filter(pl.col("experiment") == exp).sort("channel")
-        disp_name = exp_names.get(exp, exp)
-        h_bias, = ax.plot(
-            sub["bias"],
-            sub["channel"],
-            color=exp_colors[exp],
-            linestyle=METRIC_STYLES["bias"]["linestyle"],
-            marker="s",
-            label=f"Bias {disp_name}",
-        )
-        line_handles.append(h_bias)
-
-    ax.axvline(0, color='black', linestyle='-', linewidth=1)
-    title = f"{title_prefix} - Vertical Profiles"
+def _build_title(prefix: str,
+                 plot_kind: str,
+                 start_date: Optional[str],
+                 end_date: Optional[str],
+                 cycle_hours: List[int],
+                 hours: Optional[List[str]]) -> str:
+    title = f"{prefix} - {plot_kind}"
     if start_date and end_date:
         title += f"\n{start_date} - {end_date}"
     if cycle_hours:
-        fcint_hours = ", ".join(f"{h:02d}" for h in cycle_hours)
-        title_line3 = f"{fcint_hours} UTC"
+        cyc = ", ".join(f"{h:02d}" for h in cycle_hours)
+        line3 = f"{cyc} UTC"
         if hours:
-            hours_str = ", ".join(hours)
-            title_line3 += f" + {{{hours_str}}}"
-        title += f"\n{title_line3}"
-    ax.set_title(title)
-    ax.set_xlabel("Value")
-    ax.set_ylabel("Channel")
-    ax.set_yticks(counts["channel"].to_list())
-    ax.grid(True, which="both", linestyle="--", linewidth=0.5, alpha=0.7)
-    ax.legend(handles=line_handles, loc='center left', bbox_to_anchor=(1.14, 0.5), frameon=True)
-    path = os.path.join(outdir, f"{title_prefix}_profile{lead_time_str}.png")
-    fig.savefig(path, bbox_inches="tight")
-    plt.close(fig)
-    print(f"Saved plot: {path}")
+            hrs = ", ".join(hours)
+            line3 += f" + {{{hrs}}}"
+        title += f"\n{line3}"
+    return title
 
-def plot_combined_profiles(df: pl.DataFrame, outdir: str, title_prefix: str, exp_colors: Dict[str, str], exp_names: Dict[str, str], lead_time_str: str, start_date: str, end_date: str, cycle_hours: List[int], hours: Optional[List[str]]) -> None:
+def _ensure_colors(experiments: List[str], user: Dict[str, str]) -> Dict[str, str]:
+    colors = dict(user)
+    default_cycle = itertools.cycle(plt.rcParams['axes.prop_cycle'].by_key()['color'])
+    for e in experiments:
+        if e not in colors:
+            colors[e] = next(default_cycle)
+    return colors
+
+def _plot_metric_lines(ax, agg: pl.DataFrame,
+                       x_col: str,
+                       y_col: str,
+                       experiments: List[str],
+                       exp_colors: Dict[str, str],
+                       exp_names: Dict[str, str],
+                       invert_y: bool = False) -> List:
+    handles = []
+    for metric in ("rmse", "bias"):
+        for exp in experiments:
+            sub = agg.filter(pl.col("experiment") == exp).sort(y_col)
+            if sub.is_empty():
+                continue
+            disp = exp_names.get(exp, exp)
+            style = METRIC_STYLES[metric]
+            (h,) = ax.plot(
+                sub[metric],
+                sub[y_col],
+                color=exp_colors[exp],
+                linestyle=style["linestyle"],
+                marker=style["marker"],
+                label=f"{style['label']} {disp}",
+            )
+            handles.append(h)
+    if invert_y:
+        ax.invert_yaxis()
+    return handles
+
+# ---------------- Plotters ---------------- #
+
+def plot_profiles_pressure(df: pl.DataFrame,
+                           outdir: str,
+                           prefix: str,
+                           exp_colors: Dict[str, str],
+                           exp_names: Dict[str, str],
+                           lead_time_tag: str,
+                           start_date: Optional[str],
+                           end_date: Optional[str],
+                           cycle_hours: List[int],
+                           hours: Optional[List[str]]) -> None:
+    if "pressure_bracket" not in df.columns:
+        return
     mapping_df = pl.DataFrame({
         "pressure_bracket": list(BRACKET_MIDPOINTS.keys()),
         "pressure_midpoint": list(BRACKET_MIDPOINTS.values())
     })
-    agg = _aggregate_profile(df).join(mapping_df, on="pressure_bracket", how="left")
+    agg = _aggregate(df, ["pressure_bracket"]).join(mapping_df, on="pressure_bracket", how="left")
     counts = (
         agg.group_by("pressure_midpoint")
-        .agg(pl.sum("n_sum").alias("n_all"))
-        .sort("pressure_midpoint")
+           .agg(pl.sum("n_sum").alias("n_all"))
+           .sort("pressure_midpoint")
     )
-
-    fig, ax = plt.subplots(figsize=(15.0, 10.0))
-    plt.subplots_adjust(right=0.75)
+    fig, ax = plt.subplots(figsize=(12, 8))
+    plt.subplots_adjust(right=0.72)
     ax2 = ax.twiny()
     ax2.barh(counts["pressure_midpoint"], counts["n_all"], color="gray", alpha=0.15, height=60)
     ax2.set_xlabel("Count")
-
-    line_handles = []
-    exps_in_order = list(exp_colors.keys())
-
-    for exp in exps_in_order:
-        sub = agg.filter(pl.col("experiment") == exp).sort("pressure_midpoint")
-        disp_name = exp_names.get(exp, exp)
-        h_rmse, = ax.plot(
-            sub["rmse"],
-            sub["pressure_midpoint"],
-            color=exp_colors[exp],
-            linestyle=METRIC_STYLES["rmse"]["linestyle"],
-            marker="o",
-            label=f"RMSE {disp_name}",
-        )
-        line_handles.append(h_rmse)
-
-    for exp in exps_in_order:
-        sub = agg.filter(pl.col("experiment") == exp).sort("pressure_midpoint")
-        disp_name = exp_names.get(exp, exp)
-        h_bias, = ax.plot(
-            sub["bias"],
-            sub["pressure_midpoint"],
-            color=exp_colors[exp],
-            linestyle=METRIC_STYLES["bias"]["linestyle"],
-            marker="s",
-            label=f"Bias {disp_name}",
-        )
-        line_handles.append(h_bias)
-
-    ax.axvline(0, color='black', linestyle='-', linewidth=1)
-    title = f"{title_prefix} - Vertical Profiles"
-    if start_date and end_date:
-        title += f"\n{start_date} - {end_date}"
-    if cycle_hours:
-        fcint_hours = ", ".join(f"{h:02d}" for h in cycle_hours)
-        title_line3 = f"{fcint_hours} UTC"
-        if hours:
-            hours_str = ", ".join(hours)
-            title_line3 += f" + {{{hours_str}}}"
-        title += f"\n{title_line3}"
-    ax.set_title(title)
+    experiments = sorted(agg["experiment"].unique())
+    handles = _plot_metric_lines(ax, agg, x_col="rmse", y_col="pressure_midpoint",
+                                 experiments=experiments,
+                                 exp_colors=exp_colors,
+                                 exp_names=exp_names,
+                                 invert_y=True)
+    ax.axvline(0, color="black", linewidth=1)
+    ax.set_title(_build_title(prefix, "Vertical Profiles", start_date, end_date, cycle_hours, hours))
     ax.set_xlabel("Value")
     ax.set_ylabel("Pressure (hPa)")
     ax.set_yticks(list(BRACKET_MIDPOINTS.values()))
     ax.set_yticklabels(list(BRACKET_MIDPOINTS.keys()))
-    ax.invert_yaxis()
-    ax.grid(True, which="both", linestyle="--", linewidth=0.5, alpha=0.7)
-    ax.legend(handles=line_handles, loc='center left', bbox_to_anchor=(1.14, 0.5), frameon=True)
-    path = os.path.join(outdir, f"{title_prefix}_profile{lead_time_str}.png")
-    fig.savefig(path, bbox_inches="tight")
+    ax.grid(True, linestyle="--", linewidth=0.5, alpha=0.7)
+    ax.legend(handles=handles, loc="center left", bbox_to_anchor=(1.02, 0.5), frameon=True)
+    out_path = os.path.join(outdir, f"{prefix}_profile{lead_time_tag}.png")
+    fig.savefig(out_path, bbox_inches="tight")
     plt.close(fig)
-    print(f"Saved plot: {path}")
+    print(f"Saved plot: {out_path}")
 
-def plot_combined_timeseries(df: pl.DataFrame, outdir: str, title_prefix: str, exp_colors: Dict[str, str], exp_names: Dict[str, str], lead_time: str, start_date: str, end_date: str, cycle_hours: List[int], hours: Optional[List[str]]) -> None:
-    agg = _aggregate_timeseries(df).sort("vt_hour")
+def plot_profiles_channel(df: pl.DataFrame,
+                          outdir: str,
+                          prefix: str,
+                          exp_colors: Dict[str, str],
+                          exp_names: Dict[str, str],
+                          lead_time_tag: str,
+                          start_date: Optional[str],
+                          end_date: Optional[str],
+                          cycle_hours: List[int],
+                          hours: Optional[List[str]]) -> None:
+    if "channel" not in df.columns:
+        return
+    agg = _aggregate(df, ["channel"])
+    counts = (
+        agg.group_by("channel")
+           .agg(pl.sum("n_sum").alias("n_all"))
+           .sort("channel")
+    )
+    fig, ax = plt.subplots(figsize=(12, 8))
+    plt.subplots_adjust(right=0.72)
+    ax2 = ax.twiny()
+    ax2.barh(counts["channel"], counts["n_all"], color="gray", alpha=0.15, height=0.8)
+    ax2.set_xlabel("Count")
+    experiments = sorted(agg["experiment"].unique())
+    handles = _plot_metric_lines(ax, agg, x_col="rmse", y_col="channel",
+                                 experiments=experiments,
+                                 exp_colors=exp_colors,
+                                 exp_names=exp_names)
+    ax.axvline(0, color="black", linewidth=1)
+    ax.set_title(_build_title(prefix, "Vertical Profiles", start_date, end_date, cycle_hours, hours))
+    ax.set_xlabel("Value")
+    ax.set_ylabel("Channel")
+    ax.set_yticks(counts["channel"].to_list())
+    ax.grid(True, linestyle="--", linewidth=0.5, alpha=0.7)
+    ax.legend(handles=handles, loc="center left", bbox_to_anchor=(1.02, 0.5), frameon=True)
+    out_path = os.path.join(outdir, f"{prefix}_profile{lead_time_tag}.png")
+    fig.savefig(out_path, bbox_inches="tight")
+    plt.close(fig)
+    print(f"Saved plot: {out_path}")
+
+def plot_timeseries(df: pl.DataFrame,
+                    outdir: str,
+                    prefix: str,
+                    exp_colors: Dict[str, str],
+                    exp_names: Dict[str, str],
+                    lead_time_tag: str,
+                    start_date: Optional[str],
+                    end_date: Optional[str],
+                    cycle_hours: List[int],
+                    hours: Optional[List[str]]) -> None:
+    if "vt_hour" not in df.columns:
+        return
+    agg = _aggregate(df, ["vt_hour"]).sort("vt_hour")
     counts = (
         agg.group_by("vt_hour")
-        .agg(pl.sum("n_sum").alias("n_all"))
-        .sort("vt_hour")
+           .agg(pl.sum("n_sum").alias("n_all"))
+           .sort("vt_hour")
     )
-
-    fig, ax = plt.subplots(figsize=(15.0, 10.0))
-    plt.subplots_adjust(right=0.75)
+    fig, ax = plt.subplots(figsize=(14, 8))
+    plt.subplots_adjust(right=0.72)
     ax2 = ax.twinx()
     ax2.bar(counts["vt_hour"], counts["n_all"], color="gray", alpha=0.12, width=0.8)
     ax2.set_ylabel("Count")
-
-    line_handles = []
-    exps_in_order = list(exp_colors.keys())
-
-    for exp in exps_in_order:
-        sub = agg.filter(pl.col("experiment") == exp).sort("vt_hour")
-        disp_name = exp_names.get(exp, exp)
-        h_rmse, = ax.plot(
-            sub["vt_hour"],
-            sub["rmse"],
-            color=exp_colors[exp],
-            linestyle=METRIC_STYLES["rmse"]["linestyle"],
-            marker="o",
-            label=f"RMSE {disp_name}",
-        )
-        line_handles.append(h_rmse)
-
-    for exp in exps_in_order:
-        sub = agg.filter(pl.col("experiment") == exp).sort("vt_hour")
-        disp_name = exp_names.get(exp, exp)
-        h_bias, = ax.plot(
-            sub["vt_hour"],
-            sub["bias"],
-            color=exp_colors[exp],
-            linestyle=METRIC_STYLES["bias"]["linestyle"],
-            marker="s",
-            label=f"Bias {disp_name}",
-        )
-        line_handles.append(h_bias)
-
-    ax.axhline(0, color='black', linestyle='-', linewidth=1)
-    title = f"{title_prefix} - Time Series"
-    if start_date and end_date:
-        title += f"\n{start_date} - {end_date}"
-    if cycle_hours:
-        fcint_hours = ", ".join(f"{h:02d}" for h in cycle_hours)
-        title_line3 = f"{fcint_hours} UTC"
-        if hours:
-            hours_str = ", ".join(hours)
-            title_line3 += f" + {{{hours_str}}}"
-        title += f"\n{title_line3}"
-    ax.set_title(title)
+    experiments = sorted(agg["experiment"].unique())
+    handles: List = []
+    for metric in ("rmse", "bias"):
+        style = METRIC_STYLES[metric]
+        for exp in experiments:
+            sub = agg.filter(pl.col("experiment") == exp).sort("vt_hour")
+            if sub.is_empty():
+                continue
+            disp = exp_names.get(exp, exp)
+            (h,) = ax.plot(
+                sub["vt_hour"],
+                sub[metric],
+                color=exp_colors[exp],
+                linestyle=style["linestyle"],
+                marker=style["marker"],
+                label=f"{style['label']} {disp}",
+            )
+            handles.append(h)
+    ax.axhline(0, color="black", linewidth=1)
+    ax.set_title(_build_title(prefix, "Time Series", start_date, end_date, cycle_hours, hours))
     ax.set_xlabel("Valid Time")
     ax.set_ylabel("Value")
-    ax.tick_params(axis='x', rotation=45)
+    ax.tick_params(axis="x", rotation=45)
     ax.grid(True, linestyle="--", linewidth=0.5, alpha=0.7)
-    ax.legend(handles=line_handles, loc='center left', bbox_to_anchor=(1.14, 0.5), frameon=True)
-    path = os.path.join(outdir, f"{title_prefix}_timeseries{lead_time}.png")
-    fig.savefig(path, bbox_inches="tight")
+    ax.legend(handles=handles, loc="center left", bbox_to_anchor=(1.02, 0.5), frameon=True)
+    out_path = os.path.join(outdir, f"{prefix}_timeseries{lead_time_tag}.png")
+    fig.savefig(out_path, bbox_inches="tight")
     plt.close(fig)
-    print(f"Saved plot: {path}")
+    print(f"Saved plot: {out_path}")
+
+# ---------------- Main ---------------- #
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="Joint plotting for multiple experiments.")
-    parser.add_argument("--metrics", nargs="+", required=True, help="Metrics parquet files (one per experiment).")
-    parser.add_argument("--outdir", required=True, help="Output directory for plots.")
+    parser.add_argument("--metrics", nargs="+", required=True,
+                        help="Metrics parquet files (one or more, any experiments).")
+    parser.add_argument("--outdir", required=True, help="Output directory.")
     parser.add_argument("--title-prefix", required=True, help="Title / filename prefix.")
-    parser.add_argument("--lead-time", type=int, help="Select specific lead time.")
+    parser.add_argument("--lead-time", type=int, help="Filter: specific lead_time.")
     parser.add_argument("--exp-color", action="append",
                         help="Experiment color mapping EXP=COLOR (repeatable).")
     parser.add_argument("--exp-name", action="append",
-                        help="Experiment name mapping LONG_NAME=SHORT_NAME (repeatable).")
-    parser.add_argument("--start-date", help="Start date for title.")
-    parser.add_argument("--end-date", help="End date for title.")
-    parser.add_argument("--fcint", type=int, help="Forecast start time interval in hours. Not used for title.")
-    parser.add_argument("--hours", nargs="+", help="List of hours to filter data.")
+                        help="Experiment display name mapping LONG=SHORT (repeatable).")
+    parser.add_argument("--start-date", help="Override start date for title.")
+    parser.add_argument("--end-date", help="Override end date for title.")
+    parser.add_argument("--fcint", type=int,
+                        help="(Deprecated) Forecast cycle interval; ignored.")
+    parser.add_argument("--hours", nargs="+",
+                        help="Filter: list of valid-time hours (integers).")
     args = parser.parse_args()
     os.makedirs(args.outdir, exist_ok=True)
 
-    # Set global font sizes for matplotlib
+    if args.fcint is not None:
+        print("NOTE: --fcint is deprecated and ignored (no effect on plots).")
+
     plt.rcParams.update({
-        'font.size': 18,
-        'axes.titlesize': 18,
-        'axes.labelsize': 16,
-        'xtick.labelsize': 16,
-        'ytick.labelsize': 16,
-        'legend.fontsize': 16,
-        'figure.titlesize': 20
+        "font.size": 16,
+        "axes.titlesize": 18,
+        "axes.labelsize": 15,
+        "xtick.labelsize": 13,
+        "ytick.labelsize": 13,
+        "legend.fontsize": 13,
+        "figure.titlesize": 20,
     })
 
-    dfs = []
-    for m in args.metrics:
-        if not os.path.exists(m):
-            print(f"Missing metrics file: {m}")
+    # Load
+    dfs: List[pl.DataFrame] = []
+    for path in args.metrics:
+        if not os.path.exists(path):
+            print(f"Missing metrics file: {path}")
             continue
-        df = pl.read_parquet(m)
+        try:
+            df = pl.read_parquet(path)
+        except Exception as e:
+            print(f"Failed reading {path}: {e}")
+            continue
         if df.is_empty():
-            print(f"Empty metrics file: {m}")
+            print(f"Empty metrics file: {path}")
             continue
         dfs.append(df)
     if not dfs:
@@ -288,51 +297,52 @@ def main() -> None:
         return
     all_df = pl.concat(dfs, how="vertical_relaxed")
 
-    cycle_hours = sorted(all_df["cycle_hour"].unique().to_list())
-
-    if args.lead_time is not None:
+    # Optional filtering
+    if args.lead_time is not None and "lead_time" in all_df.columns:
         all_df = all_df.filter(pl.col("lead_time") == args.lead_time)
 
-    if args.hours:
-        valid_hours = [int(h) for h in args.hours]
-        all_df = all_df.filter(pl.col("vt_hour").dt.hour().is_in(valid_hours))
+    if args.hours and "vt_hour" in all_df.columns and all_df["vt_hour"].dtype.is_temporal():
+        want_hours = {int(h) for h in args.hours}
+        all_df = all_df.filter(pl.col("vt_hour").dt.hour().is_in(sorted(want_hours)))
 
-    start_date = all_df["vt_hour"].min()
-    end_date = all_df["vt_hour"].max()
+    if all_df.is_empty():
+        print("All data removed after filtering; aborting.")
+        return
 
-    exp_names_map: Dict[str, str] = {}
-    if args.exp_name:
-        for spec in args.exp_name:
-            if "=" not in spec:
-                print(f"Ignoring malformed --exp-name '{spec}' (need LONG_NAME=SHORT_NAME).")
-                continue
-            k, v = spec.split("=", 1)
-            exp_names_map[k] = v
+    # Title date range (from data unless overridden)
+    auto_start = str(all_df["vt_hour"].min()) if "vt_hour" in all_df.columns else None
+    auto_end = str(all_df["vt_hour"].max()) if "vt_hour" in all_df.columns else None
+    start_date = args.start_date or auto_start
+    end_date = args.end_date or auto_end
 
-    # Build color map
-    exp_names = sorted(all_df.select(pl.col("experiment").unique()).to_series().to_list())
-    exp_colors: Dict[str, str] = {}
-    if args.exp_color:
-        for spec in args.exp_color:
-            if "=" not in spec:
-                print(f"Ignoring malformed --exp-color '{spec}' (need EXP=COLOR).")
-                continue
-            k, v = spec.split("=", 1)
-            exp_colors[k] = v
-    # Assign any missing colors from default cycle
-    import itertools
-    default_cycle = itertools.cycle(plt.rcParams['axes.prop_cycle'].by_key()['color'])
-    for e in exp_names:
-        if e not in exp_colors:
-            exp_colors[e] = next(default_cycle)
-
-    lead_time_str = f"_lt_{args.lead_time}" if args.lead_time is not None else ""
-
-    if "channel" in all_df.columns:
-        plot_combined_tb_profiles(all_df, args.outdir, args.title_prefix, exp_colors, exp_names_map, lead_time_str, start_date, end_date, cycle_hours, args.hours)
+    # Cycle hours if available
+    if "cycle_hour" in all_df.columns:
+        cycle_hours = sorted(all_df["cycle_hour"].unique().to_list())
     else:
-        plot_combined_profiles(all_df, args.outdir, args.title_prefix, exp_colors, exp_names_map, lead_time_str, start_date, end_date, cycle_hours, args.hours)
-    plot_combined_timeseries(all_df, args.outdir, args.title_prefix, exp_colors, exp_names_map, lead_time_str, start_date, end_date, cycle_hours, args.hours)
+        cycle_hours = []
+
+    # Experiment sets
+    experiments = sorted(all_df["experiment"].unique().to_list())
+    exp_names_map = _parse_mapping(args.exp_name, "exp-name")
+    exp_color_map = _ensure_colors(experiments, _parse_mapping(args.exp_color, "exp-color"))
+
+    lead_time_tag = f"_lt_{args.lead_time}" if args.lead_time is not None else ""
+
+    # Plot (channel vs pressure profile selection)
+    if "channel" in all_df.columns:
+        plot_profiles_channel(all_df, args.outdir, args.title_prefix,
+                              exp_color_map, exp_names_map, lead_time_tag,
+                              start_date, end_date, cycle_hours, args.hours)
+    elif "pressure_bracket" in all_df.columns:
+        plot_profiles_pressure(all_df, args.outdir, args.title_prefix,
+                               exp_color_map, exp_names_map, lead_time_tag,
+                               start_date, end_date, cycle_hours, args.hours)
+    else:
+        print("No profile dimension (channel/pressure_bracket) found: skipping profile plot.")
+
+    plot_timeseries(all_df, args.outdir, args.title_prefix,
+                    exp_color_map, exp_names_map, lead_time_tag,
+                    start_date, end_date, cycle_hours, args.hours)
 
 if __name__ == "__main__":
     main()

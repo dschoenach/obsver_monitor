@@ -76,39 +76,44 @@ fi
 # --- Run Scorecards ---
 if [[ -f "$METRICS_FILE" && ${#EXPS[@]} -gt 1 ]]; then
   echo "Building scorecards for monitor surface metrics..."
-  for i in $(seq 1 $((${#EXPS[@]} - 1))); do
-    python3 -m src.python.scorecard \
-      --exp-a "${EXPS[0]}" \
-      --exp-b "${EXPS[$i]}" \
-      --exp-a-name "${EXP_NAMES[0]}" \
-      --exp-b-name "${EXP_NAMES[$i]}" \
-      --metrics "$METRICS_FILE" \
-      --outdir "$PLOTS" \
-      --fcint "$FCINT" \
-      --title "${PROJECTNAME}_surface_${EXP_NAMES[0]}_vs_${EXP_NAMES[$i]}"
+  for i in $(seq 0 $((${#EXPS[@]} - 2))); do
+    for j in $(seq $(($i + 1)) $((${#EXPS[@]} - 1))); do
+      python3 -m src.python.scorecard \
+        --exp-a "${EXPS[$i]}" \
+        --exp-b "${EXPS[$j]}" \
+        --exp-a-name "${EXP_NAMES[$i]}" \
+        --exp-b-name "${EXP_NAMES[$j]}" \
+        --metrics "$METRICS_FILE" \
+        --outdir "$PLOTS" \
+        --fcint "$FCINT" \
+        --title "${PROJECTNAME}_surface_${EXP_NAMES[$i]}_vs_${EXP_NAMES[$j]}"
+    done
   done
 else
   echo "WARNING: Not enough experiments for scorecard or metrics file not found."
 fi
 
+
 if [[ -f "$TEMP_METRICS_FILE" && ${#EXPS[@]} -gt 1 ]]; then
   echo "Building scorecards for monitor temp profiles..."
-  for i in $(seq 1 $((${#EXPS[@]} - 1))); do
-    python3 -m src.python.scorecard \
-      --exp-a "${EXPS[0]}" \
-      --exp-b "${EXPS[$i]}" \
-      --exp-a-name "${EXP_NAMES[0]}" \
-      --exp-b-name "${EXP_NAMES[$i]}" \
-      --metrics "$TEMP_METRICS_FILE" \
-      --outdir "$PLOTS" \
-      --fcint "$FCINT" \
-      --title "${PROJECTNAME}_temp_${EXP_NAMES[0]}_vs_${EXP_NAMES[$i]}" # \
-      #--monitor-temp-cycles "${MONITOR_TEMP_CYCLES}"
+  for i in $(seq 0 $((${#EXPS[@]} - 2))); do
+    for j in $(seq $(($i + 1)) $((${#EXPS[@]} - 1))); do
+      python3 -m src.python.scorecard \
+        --exp-a "${EXPS[$i]}" \
+        --exp-b "${EXPS[$j]}" \
+        --exp-a-name "${EXP_NAMES[$i]}" \
+        --exp-b-name "${EXP_NAMES[$j]}" \
+        --metrics "$TEMP_METRICS_FILE" \
+        --outdir "$PLOTS" \
+        --fcint "$FCINT" \
+        --title "${PROJECTNAME}_temp_${EXP_NAMES[$i]}_vs_${EXP_NAMES[$j]}"
+         #\        --monitor-temp-cycles "${MONITOR_TEMP_CYCLES}"
+    done
   done
-
 else
   echo "WARNING: Not enough experiments for temp scorecard or temp metrics file not found."
 fi
+
 
 
 # --- Run Plotting for Surface Metrics ---
