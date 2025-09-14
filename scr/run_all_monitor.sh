@@ -84,6 +84,7 @@ if [[ -f "$METRICS_FILE" && ${#EXPS[@]} -gt 1 ]]; then
       --exp-b-name "${EXP_NAMES[$i]}" \
       --metrics "$METRICS_FILE" \
       --outdir "$PLOTS" \
+      --fcint "$FCINT" \
       --title "${PROJECTNAME}_surface_${EXP_NAMES[0]}_vs_${EXP_NAMES[$i]}"
   done
 else
@@ -100,8 +101,11 @@ if [[ -f "$TEMP_METRICS_FILE" && ${#EXPS[@]} -gt 1 ]]; then
       --exp-b-name "${EXP_NAMES[$i]}" \
       --metrics "$TEMP_METRICS_FILE" \
       --outdir "$PLOTS" \
-      --title "${PROJECTNAME}_temp_${EXP_NAMES[0]}_vs_${EXP_NAMES[$i]}"
+      --fcint "$FCINT" \
+      --title "${PROJECTNAME}_temp_${EXP_NAMES[0]}_vs_${EXP_NAMES[$i]}" # \
+      #--monitor-temp-cycles "${MONITOR_TEMP_CYCLES}"
   done
+
 else
   echo "WARNING: Not enough experiments for temp scorecard or temp metrics file not found."
 fi

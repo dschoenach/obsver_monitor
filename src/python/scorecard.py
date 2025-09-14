@@ -8,7 +8,9 @@ import matplotlib.pyplot as plt
 import matplotlib.patches as patches
 from sklearn.preprocessing import minmax_scale
 
-def plot_scorecard(df: pl.DataFrame, outdir: str, title: str, exp_names: list[str], display_names: list[str], start_date: str, end_date: str) -> None:
+def plot_scorecard(df: pl.DataFrame, outdir: str, title: str, exp_names: list[str],
+                   display_names: list[str], start_date: str, end_date: str,
+                   fcint: int | None) -> None:
     if len(exp_names) != 2:
         print("Need exactly two experiments.")
         return
@@ -186,26 +188,74 @@ def plot_scorecard(df: pl.DataFrame, outdir: str, title: str, exp_names: list[st
     ax.set_ylim(-1, len(variables))
     ax.set_yticks(list(y_coords.values()))
     ax.set_yticklabels(list(y_coords.keys()))
-    ax.set_xticks(sorted(df_plot['lead_time'].unique()))
+    # OLD:
+    # ax.set_xticks(sorted(df_plot['lead_time'].unique()))
+    # NEW: show only every 3rd hour
+    all_leads = sorted(df_plot['lead_time'].unique())
+    try:
+        # Treat as integers if possible
+        lead_array = np.array(all_leads)
+        if np.issubdtype(lead_array.dtype, np.integer):
+            xticks = [lt for lt in all_leads if lt % 3 == 0]
+        else:
+            # Fallback: pick every 3rd unique value by position
+            xticks = all_leads[::3]
+    except Exception:
+        xticks = all_leads[::3]
+    if not xticks:
+        xticks = all_leads
+    ax.set_xticks(xticks)
     ax.set_xlabel('Lead Time (hours/days)', fontsize=12)
     ax.set_ylabel('Variable', fontsize=12)
-    full_title = f'{title}: {display_names[0]} vs {display_names[1]}'
+
+    # --- 6. Title + Legend (reverted to simpler original style) ---
+    # Build multi-line title
+    full_title = f"{title}: {display_names[0]} vs {display_names[1]}"
     if start_date and end_date:
         full_title += f"\n{start_date} - {end_date}"
-    ax.set_title(full_title, fontsize=16, pad=20)
-    ax.spines['top'].set_visible(False)
-    ax.spines['right'].set_visible(False)
-    ax.tick_params(axis='both', which='both', length=0)
-    ax.grid(False)
+    if fcint:
+        fcint_hours = ", ".join(f"{h:02d}" for h in range(0, 24, fcint))
+        full_title += f"\n{fcint_hours} UTC"
 
-    # --- 6. Create a custom legend ---
+    ax.set_title(full_title, fontsize=16, loc='left', pad=30)
+
+    # Legend (outside upper-right of plotting area)
     legend_elements = [
-        patches.Patch(facecolor='steelblue', edgecolor='black', alpha=0.8, label='Positive (Significant)', linewidth=1.5),
-        patches.Patch(facecolor='steelblue', edgecolor='none', alpha=0.2, label='Positive (Not Significant)'),
-        patches.Patch(facecolor='#b2182b', edgecolor='none', alpha=0.2, label='Negative (Not Significant)'),
-        patches.Patch(facecolor='#b2182b', edgecolor='black', alpha=0.8, label='Negative (Significant)', linewidth=1.5)
+        patches.Patch(facecolor='steelblue', edgecolor='black', alpha=0.8,
+                      label='Positive (Significant)', linewidth=1.5),
+        patches.Patch(facecolor='steelblue', edgecolor='none', alpha=0.2,
+                      label='Positive (Not Significant)'),
+        patches.Patch(facecolor='#b2182b', edgecolor='none', alpha=0.2,
+                      label='Negative (Not Significant)'),
+        patches.Patch(facecolor='#b2182b', edgecolor='black', alpha=0.8,
+                      label='Negative (Significant)', linewidth=1.5),
     ]
-    ax.legend(handles=legend_elements, loc='center left', bbox_to_anchor=(1, 0.5), title=f'{display_names[1]} better than {display_names[0]}')
+
+    # Draw to get the true axes position
+    fig.canvas.draw()
+    ax_bb = ax.get_position()  # in figure fraction (x0,y0,x1,y1)
+
+    # Try to place legend just outside the axes' right edge, aligned with its top
+    gap = 0.01
+    anchor_x = ax_bb.x1 + gap
+    anchor_y = ax_bb.y1
+
+    if anchor_x > 0.95:
+        # Not enough space: shrink axes width, then recompute
+        plt.subplots_adjust(right=0.75)
+        fig.canvas.draw()
+        ax_bb = ax.get_position()
+        anchor_x = min(0.97, ax_bb.x1 + gap)
+        anchor_y = ax_bb.y1
+
+    fig.legend(
+        handles=legend_elements,
+        title=f"{display_names[1]} vs {display_names[0]}",
+        loc='outside upper right',
+        bbox_to_anchor=(anchor_x-0.01, anchor_y+0.14),
+        frameon=True,
+        borderaxespad=0.0
+    )
 
     os.makedirs(outdir, exist_ok=True)
     out_path = os.path.join(outdir, f"{title}_scorecard.png")
@@ -242,6 +292,8 @@ def main():
                         help="Metrics parquet files or directories (auto-glob *_metrics.parquet).")
     parser.add_argument("--outdir", required=True, help="Directory to save plots.")
     parser.add_argument("--title", required=True, help="Scorecard title.")
+    parser.add_argument("--monitor-temp-cycles", type=int, help="Filter vt_hour by multiples of this cycle.")
+    parser.add_argument("--fcint", type=int, help="Forecast interval in hours to display in title.")
     args = parser.parse_args()
 
     exp_names = [args.exp_a, args.exp_b]
@@ -281,10 +333,15 @@ def main():
 
     all_df = pl.concat(dfs, how="vertical_relaxed")
 
+    # Filter by monitor temp cycles if provided
+    if args.monitor_temp_cycles and 'vt_hour' in all_df.columns:
+        print(f"Filtering by vt_hour cycle: {args.monitor_temp_cycles}")
+        all_df = all_df.filter((pl.col("vt_hour") % 100) % args.monitor_temp_cycles == 0)
+
     start_date = all_df["vt_hour"].min()
     end_date = all_df["vt_hour"].max()
 
-    plot_scorecard(all_df, args.outdir, args.title, exp_names, display_names, start_date, end_date)
+    plot_scorecard(all_df, args.outdir, args.title, exp_names, display_names, start_date, end_date, args.fcint)
     
     # REMOVED the incorrect SQLite logic from here
 
