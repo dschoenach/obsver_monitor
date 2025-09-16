@@ -10,8 +10,11 @@ struct SurfaceStation {
     double lat = -999.0, lon = -999.0, hgt = -999.0;
     double nn = -999.0, dd = -999.0, ff = -999.0, tt = -999.0, rh = -999.0, ps = -999.0;
     double pss = -999.0; // NEW mean sea-level pressure
+    double ttha = -999.0; // Height-adjusted T2m (TTHA)
     double pe = -999.0, qq = -999.0, vi = -999.0, td = -999.0, tx = -999.0, tn = -999.0;
     double gg = -999.0, gx = -999.0, fx = -999.0;
+    double ch = -999.0; // Cloud base height
+    double lc = -999.0; // Low cloud amount
     // Added observed precipitation accumulation windows
     double pe1 = -999.0, pe3 = -999.0, pe6 = -999.0, pe12 = -999.0, pe24 = -999.0;
 };
@@ -20,6 +23,7 @@ struct TempLevel {
     int station_id = -1;
     double pressure = -999.0;
     double temp = -999.0;
+    double td   = -999.0;
     double fi   = -999.0;
     double rh   = -999.0;
     double qq   = -999.0;

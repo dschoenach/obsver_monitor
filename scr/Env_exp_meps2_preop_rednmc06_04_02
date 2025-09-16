@@ -14,9 +14,13 @@ export EXP_COLORS_MONITOR="#0072B2 #E69F00 #009E73" # number must be the same as
 #009E73 (teal/green)
 # --- Date/Time Configuration ---
 export START_MONITOR="2025070200"
-export END_MONITOR="2025080321"
+export END_MONITOR="2025070321"
 export FCINT_MONITOR=12
 # Monitor specific settings
+
+# Monitor variable order (affects verification + webapp)
+export SURFPAR_MONITOR="PS SPS FF GX DD TT TTHA TN TX TD TDD RH QQ NN LC CH PE1 PE3 PE6 PE12 VI"
+export TEMPPAR_MONITOR="TT TD FF DD FI RH QQ"
 export MONITOR_TEMP_CYCLES="6" # which observations in the monitor-temp profile and timeseries plots, every 6th hour
 
 
@@ -59,7 +63,7 @@ else
     echo -e "\n----- Monitor Verification Disabled -----"
 fi
 
-OBSVER=1
+OBSVER=0
 if [ $OBSVER -eq 1 ]; then
     echo -e "\n----- Obsver Verification Enabled -----"
 # --- Run Obsver Verification ---
@@ -108,6 +112,27 @@ fi
 cp webapp/index.php "${WEBAPP_OUTPUT}/index.html"
 mkdir -p "${WEBAPP_OUTPUT}/js"
 cp webapp/js/main.js "${WEBAPP_OUTPUT}/js/main.js"
+# Inject monitor order config for the static bundle
+{
+  echo "window.MONITOR_VAR_ORDER = {" > "${WEBAPP_OUTPUT}/js/config.js"
+  # Surf order
+  echo -n "  surf: [" >> "${WEBAPP_OUTPUT}/js/config.js"
+  first=1
+  for v in ${SURFPAR_MONITOR}; do
+    if [ $first -eq 1 ]; then first=0; else echo -n ", " >> "${WEBAPP_OUTPUT}/js/config.js"; fi
+    echo -n "\"$v\"" >> "${WEBAPP_OUTPUT}/js/config.js"
+  done
+  echo "]," >> "${WEBAPP_OUTPUT}/js/config.js"
+  # Temp order
+  echo -n "  temp: [" >> "${WEBAPP_OUTPUT}/js/config.js"
+  first=1
+  for v in ${TEMPPAR_MONITOR}; do
+    if [ $first -eq 1 ]; then first=0; else echo -n ", " >> "${WEBAPP_OUTPUT}/js/config.js"; fi
+    echo -n "\"$v\"" >> "${WEBAPP_OUTPUT}/js/config.js"
+  done
+  echo "]\n};" >> "${WEBAPP_OUTPUT}/js/config.js"
+}
+sed -i 's#<script src="js/main.js"></script>#<script src="js/config.js"></script>\n    <script src="js/main.js"></script>#' "${WEBAPP_OUTPUT}/index.html"
 mkdir -p "${WEBAPP_OUTPUT}/css"
 cp webapp/css/style.css "${WEBAPP_OUTPUT}/css/style.css"
 

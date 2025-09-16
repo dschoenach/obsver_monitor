@@ -10,10 +10,13 @@
 #include <fstream>
 #include <map>
 #include <unordered_map>
+#include <unordered_set>
 #include <cmath>
 #include <algorithm>
 #include <chrono>
 #include <omp.h>
+#include <cstdlib>
+#include <sstream>
 
 namespace fs = std::filesystem;
 
@@ -71,9 +74,53 @@ int main(int argc, char* argv[]) {
     std::cout << "Found " << vobs_files.size() << " vobs files and " << vfld_files.size() << " vfld files to process." << std::endl;
     if (vfld_files.empty() || vobs_files.empty()) { std::cerr << "Error: No data files found." << std::endl; return 1; }
 
+    // Helper to parse space-delimited env lists
+    auto parse_env_list = [](const char* name) {
+        std::vector<std::string> out;
+        const char* env = std::getenv(name);
+        if (!env) return out;
+        std::string env_str(env);
+        std::istringstream iss{env_str};
+        std::string tok;
+        while (iss >> tok) out.push_back(tok);
+        return out;
+    };
+
+    // Surface variables to verify (order defines output emphasis)
+    std::vector<std::string> supported_variables = {
+        // Requested SURFPAR order
+        "PS","SPS","FF","GX","DD","TT","TTHA","TN","TX","TD","TDD","RH","QQ","NN","LC","CH","VI"
+    };
+    {
+        auto from_env = parse_env_list("SURFPAR_MONITOR");
+        if (!from_env.empty()) supported_variables = std::move(from_env);
+    }
+    // Temp variables order (upper-air)
+    std::vector<std::string> temp_supported_variables = {"TT","TD","FF","DD","FI","RH","QQ"};
+    {
+        auto from_env = parse_env_list("TEMPPAR_MONITOR");
+        if (!from_env.empty()) temp_supported_variables = std::move(from_env);
+    }
+    // Build precipitation windows from env selection (SURFPAR_MONITOR); fallback to defaults if not provided
+    auto build_precip_windows = [&](const std::vector<std::string>& env_list){
+        std::vector<std::pair<std::string,int>> out;
+        const std::vector<std::pair<std::string,int>> candidates = {
+            {"PE1",1},{"PE3",3},{"PE6",6},{"PE12",12},{"PE24",24}
+        };
+        if (!env_list.empty()) {
+            std::unordered_set<std::string> envset(env_list.begin(), env_list.end());
+            for (const auto& c : candidates) {
+                if (envset.count(c.first)) out.push_back(c);
+            }
+            return out;
+        }
+        return candidates;
+    };
+    const auto precip_windows = build_precip_windows(parse_env_list("SURFPAR_MONITOR"));
+
     // Precompute forecast cumulative precipitation totals per (experiment|base_time)->lead->station
     std::unordered_map<std::string, std::map<int, std::unordered_map<int,double>>> precip_totals;
-    {
+    if (!precip_windows.empty()) {
         std::cout << "Precomputing forecast cumulative precipitation totals..." << std::endl;
         for (const auto& fi : vfld_files) {
             int version_tmp;
@@ -87,6 +134,8 @@ int main(int argc, char* argv[]) {
                 if (s.pe > -98.0) station_map[s.id] = s.pe; // cumulative since start
             }
         }
+    } else {
+        std::cout << "Skipping precipitation accumulation (no PE windows selected)." << std::endl;
     }
 
     auto vobs_read_start_time = std::chrono::high_resolution_clock::now();
@@ -113,12 +162,6 @@ int main(int argc, char* argv[]) {
     std::map<ResultKey, AggregatedStats> final_surface_results;
     std::map<TempResultKey, AggregatedStats> final_temp_results;
 
-    const std::vector<std::string> supported_variables = {
-        "NN","DD","FF","TT","RH","PS","PSS","QQ","VI","TD","TX","TN","GG","GX","FX"
-    };
-    const std::vector<std::pair<std::string,int>> precip_windows = {
-        {"PE1",1},{"PE3",3},{"PE6",6},{"PE12",12},{"PE24",24}
-    };
     
     #pragma omp parallel
     {
@@ -153,14 +196,27 @@ int main(int argc, char* argv[]) {
                         }
                     };
                     for (const auto& var : supported_variables) {
-                        if(var=="NN")process_var("NN",station_vfld.nn,station_vobs.nn);else if(var=="DD")process_var("DD",station_vfld.dd,station_vobs.dd);
-                        else if(var=="FF")process_var("FF",station_vfld.ff,station_vobs.ff);else if(var=="TT")process_var("TT",station_vfld.tt,station_vobs.tt);
-                        else if(var=="RH")process_var("RH",station_vfld.rh,station_vobs.rh);else if(var=="PS")process_var("PS",station_vfld.ps,station_vobs.ps);
-                        else if(var=="PSS")process_var("PSS",station_vfld.pss,station_vobs.pss);else if(var=="QQ")process_var("QQ",station_vfld.qq,station_vobs.qq);
-                        else if(var=="VI")process_var("VI",station_vfld.vi,station_vobs.vi);else if(var=="TD")process_var("TD",station_vfld.td,station_vobs.td);
-                        else if(var=="TX")process_var("TX",station_vfld.tx,station_vobs.tx);else if(var=="TN")process_var("TN",station_vfld.tn,station_vobs.tn);
-                        else if(var=="GG")process_var("GG",station_vfld.gg,station_vobs.gg);else if(var=="GX")process_var("GX",station_vfld.gx,station_vobs.gx);
-                        else if(var=="FX")process_var("FX",station_vfld.fx,station_vobs.fx);
+                        if(var=="PS")process_var("PS",station_vfld.ps,station_vobs.ps);
+                        else if(var=="SPS")process_var("SPS",station_vfld.pss,station_vobs.pss);
+                        else if(var=="FF")process_var("FF",station_vfld.ff,station_vobs.ff);
+                        else if(var=="GX")process_var("GX",station_vfld.gx,station_vobs.gx);
+                        else if(var=="DD")process_var("DD",station_vfld.dd,station_vobs.dd);
+                        else if(var=="TT")process_var("TT",station_vfld.tt,station_vobs.tt);
+                        else if(var=="TTHA")process_var("TTHA",station_vfld.ttha,station_vobs.ttha);
+                        else if(var=="TN")process_var("TN",station_vfld.tn,station_vobs.tn);
+                        else if(var=="TX")process_var("TX",station_vfld.tx,station_vobs.tx);
+                        else if(var=="TD")process_var("TD",station_vfld.td,station_vobs.td);
+                        else if(var=="TDD"){
+                            double f = (station_vfld.tt>-98.0 && station_vfld.td>-98.0)? (station_vfld.tt - station_vfld.td) : -999.0;
+                            double o = (station_vobs.tt>-98.0 && station_vobs.td>-98.0)? (station_vobs.tt - station_vobs.td) : -999.0;
+                            process_var("TDD", f, o);
+                        }
+                        else if(var=="RH")process_var("RH",station_vfld.rh,station_vobs.rh);
+                        else if(var=="QQ")process_var("QQ",station_vfld.qq,station_vobs.qq);
+                        else if(var=="NN")process_var("NN",station_vfld.nn,station_vobs.nn);
+                        else if(var=="LC")process_var("LC",station_vfld.lc,station_vobs.lc);
+                        else if(var=="CH")process_var("CH",station_vfld.ch,station_vobs.ch);
+                        else if(var=="VI")process_var("VI",station_vfld.vi,station_vobs.vi);
                     }
 
                     // Precipitation windows (derive increments from cumulative PE)
@@ -219,12 +275,9 @@ int main(int argc, char* argv[]) {
                     auto range = vobs_index.equal_range(mk_key(tl_vfld.station_id, tl_vfld.pressure));
                     if (range.first != range.second) {
                         const TempLevel* tl_vobs = range.first->second;
-                        process_temp_var("TT", tl_vfld, *tl_vobs);
-                        process_temp_var("RH", tl_vfld, *tl_vobs);
-                        process_temp_var("FI", tl_vfld, *tl_vobs);
-                        process_temp_var("QQ", tl_vfld, *tl_vobs);
-                        process_temp_var("DD", tl_vfld, *tl_vobs);
-                        process_temp_var("FF", tl_vfld, *tl_vobs);
+                        for (const auto& tvar : temp_supported_variables) {
+                            process_temp_var(tvar, tl_vfld, *tl_vobs);
+                        }
                     }
                 }
             }

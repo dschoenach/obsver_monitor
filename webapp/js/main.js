@@ -22,6 +22,30 @@ $(document).ready(function() {
         }
     };
 
+    // Variable order for monitor categories; can be overridden by window.MONITOR_VAR_ORDER (static bundles)
+    const monitorSurfOrder = (window.MONITOR_VAR_ORDER && window.MONITOR_VAR_ORDER.surf)
+        ? window.MONITOR_VAR_ORDER.surf
+        : ['PS','SPS','FF','GX','DD','TT','TTHA','TN','TX','TD','TDD','RH','QQ','NN','LC','CH','PE1','PE3','PE6','PE12','VI'];
+    const monitorVertOrder = (window.MONITOR_VAR_ORDER && window.MONITOR_VAR_ORDER.temp)
+        ? window.MONITOR_VAR_ORDER.temp
+        : ['TT','TD','FF','DD','FI','RH','QQ'];
+    function sortByFixedOrder(vars, project, category, labels) {
+        if (project !== 'monitor') {
+            // Default: label sort for non-monitor
+            return vars.sort((a, b) => (labels[a] || a).localeCompare(labels[b] || b));
+        }
+        const wantsVertical = categoryWantsVertical(project, category);
+        const orderArr = wantsVertical ? monitorVertOrder : monitorSurfOrder;
+        const index = new Map(orderArr.map((v, i) => [v, i]));
+        return vars.sort((a, b) => {
+            const ia = index.has(a) ? index.get(a) : Number.MAX_SAFE_INTEGER;
+            const ib = index.has(b) ? index.get(b) : Number.MAX_SAFE_INTEGER;
+            if (ia !== ib) return ia - ib;
+            // Fallback to label
+            return (labels[a] || a).localeCompare(labels[b] || b);
+        });
+    }
+
     const categoryDisplay = {
         monitor: {
             'FCVER_SURF': 'Verf. by LeadTime (Surface)',
@@ -111,8 +135,8 @@ $(document).ready(function() {
             }
         }
 
-        // Sort by display label
-        relevantVars.sort((a, b) => (labels[a] || a).localeCompare(labels[b] || b));
+        // Sort according to fixed order for monitor; else by label
+        relevantVars = sortByFixedOrder(relevantVars, project, category, labels);
         relevantVars.forEach(v => {
             const label = labels[v] || v;
             nav.append(`<a href="#" data-variable="${v}">${label}</a>`);

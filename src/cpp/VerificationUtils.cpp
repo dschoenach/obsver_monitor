@@ -9,9 +9,10 @@ double get_surface_value(const SurfaceStation& s, const std::string& var) {
     else if (var == "DD") return s.dd;
     else if (var == "FF") return s.ff;
     else if (var == "TT") return s.tt;
+    else if (var == "TTHA") return s.ttha;
     else if (var == "RH") return s.rh;
     else if (var == "PS") return s.ps;
-    else if (var == "PSS") return s.pss;   // NEW
+    else if (var == "SPS" || var == "PSS") return s.pss;   // station pressure
     else if (var == "PE") return s.pe;          // total (forecast only)
     else if (var == "PE1") return s.pe1;
     else if (var == "PE3") return s.pe3;
@@ -26,11 +27,14 @@ double get_surface_value(const SurfaceStation& s, const std::string& var) {
     else if (var == "GG") return s.gg;
     else if (var == "GX") return s.gx;
     else if (var == "FX") return s.fx;
+    else if (var == "CH") return s.ch;
+    else if (var == "LC") return s.lc;
     return -999.0;
 }
 
 double get_temp_value(const TempLevel& t, const std::string& var) {
     if (var == "TT") return t.temp;
+    else if (var == "TD") return t.td;
     else if (var == "RH") return t.rh;
     else if (var == "QQ") return t.qq;
     else if (var == "DD") return t.dd;
