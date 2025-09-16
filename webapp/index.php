@@ -11,12 +11,15 @@
             <h1>Unified Verification Report</h1>
         </header>
 
+        <div id="topbar">
+            <nav id="project-nav" class="project-row">
+                <h2>Projects</h2>
+                <!-- Projects will be loaded here as links -->
+            </nav>
+        </div>
+
         <div class="main-layout">
             <aside class="sidebar">
-                <nav id="project-nav">
-                    <h2>Projects</h2>
-                    <!-- Projects will be loaded here as links -->
-                </nav>
                 <nav id="category-nav">
                     <h2>Categories</h2>
                     <!-- Categories will be loaded here -->

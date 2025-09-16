@@ -60,10 +60,34 @@ int main(int argc, char* argv[]) {
         }
     }
     for (const auto& entry : fs::recursive_directory_iterator(vobs_path)) {
-        if (entry.is_regular_file()) { FileInfo info = parse_filename(entry.path().string()); if (info.type == "vobs") vobs_files.push_back(info); }
+        if (!entry.is_regular_file()) continue;
+        FileInfo info = parse_filename(entry.path().string());
+        if (info.type != "vobs") continue;
+        // Filter vobs by start/end like vfld (using valid_time)
+        if (info.valid_time >= start_dt && info.valid_time <= end_dt) {
+            vobs_files.push_back(info);
+        }
     }
     std::cout << "Found " << vobs_files.size() << " vobs files and " << vfld_files.size() << " vfld files to process." << std::endl;
     if (vfld_files.empty() || vobs_files.empty()) { std::cerr << "Error: No data files found." << std::endl; return 1; }
+
+    // Precompute forecast cumulative precipitation totals per (experiment|base_time)->lead->station
+    std::unordered_map<std::string, std::map<int, std::unordered_map<int,double>>> precip_totals;
+    {
+        std::cout << "Precomputing forecast cumulative precipitation totals..." << std::endl;
+        for (const auto& fi : vfld_files) {
+            int version_tmp;
+            std::vector<SurfaceStation> st_tmp;
+            std::vector<TempLevel> tl_tmp;
+            read_data_file(fi.path, true, version_tmp, st_tmp, tl_tmp);
+            std::string key = fi.experiment + "|" + std::to_string(fi.base_time);
+            auto& lead_map = precip_totals[key];
+            auto& station_map = lead_map[fi.lead_time];
+            for (const auto& s : st_tmp) {
+                if (s.pe > -98.0) station_map[s.id] = s.pe; // cumulative since start
+            }
+        }
+    }
 
     auto vobs_read_start_time = std::chrono::high_resolution_clock::now();
     std::cout << "Reading all vobs files into memory (in parallel)..." << std::endl;
@@ -89,7 +113,12 @@ int main(int argc, char* argv[]) {
     std::map<ResultKey, AggregatedStats> final_surface_results;
     std::map<TempResultKey, AggregatedStats> final_temp_results;
 
-    const std::vector<std::string> supported_variables = {"NN","DD","FF","TT","RH","PS","PE","QQ","VI","TD","TX","TN","GG","GX","FX","FI"};
+    const std::vector<std::string> supported_variables = {
+        "NN","DD","FF","TT","RH","PS","PSS","QQ","VI","TD","TX","TN","GG","GX","FX"
+    };
+    const std::vector<std::pair<std::string,int>> precip_windows = {
+        {"PE1",1},{"PE3",3},{"PE6",6},{"PE12",12},{"PE24",24}
+    };
     
     #pragma omp parallel
     {
@@ -127,11 +156,42 @@ int main(int argc, char* argv[]) {
                         if(var=="NN")process_var("NN",station_vfld.nn,station_vobs.nn);else if(var=="DD")process_var("DD",station_vfld.dd,station_vobs.dd);
                         else if(var=="FF")process_var("FF",station_vfld.ff,station_vobs.ff);else if(var=="TT")process_var("TT",station_vfld.tt,station_vobs.tt);
                         else if(var=="RH")process_var("RH",station_vfld.rh,station_vobs.rh);else if(var=="PS")process_var("PS",station_vfld.ps,station_vobs.ps);
-                        else if(var=="PE")process_var("PE",station_vfld.pe,station_vobs.pe);else if(var=="QQ")process_var("QQ",station_vfld.qq,station_vobs.qq);
+                        else if(var=="PSS")process_var("PSS",station_vfld.pss,station_vobs.pss);else if(var=="QQ")process_var("QQ",station_vfld.qq,station_vobs.qq);
                         else if(var=="VI")process_var("VI",station_vfld.vi,station_vobs.vi);else if(var=="TD")process_var("TD",station_vfld.td,station_vobs.td);
                         else if(var=="TX")process_var("TX",station_vfld.tx,station_vobs.tx);else if(var=="TN")process_var("TN",station_vfld.tn,station_vobs.tn);
                         else if(var=="GG")process_var("GG",station_vfld.gg,station_vobs.gg);else if(var=="GX")process_var("GX",station_vfld.gx,station_vobs.gx);
                         else if(var=="FX")process_var("FX",station_vfld.fx,station_vobs.fx);
+                    }
+
+                    // Precipitation windows (derive increments from cumulative PE)
+                    std::string precip_key = vfld_info.experiment + "|" + std::to_string(vfld_info.base_time);
+                    auto pt_it = precip_totals.find(precip_key);
+                    if (pt_it != precip_totals.end()) {
+                        auto& lead_map = pt_it->second;
+                        for (const auto& pw : precip_windows) {
+                            const std::string& pvar = pw.first;
+                            int win = pw.second;
+                            if (vfld_info.lead_time < win) continue; // cannot form window
+                            auto it_curr = lead_map.find(vfld_info.lead_time);
+                            auto it_prev = lead_map.find(vfld_info.lead_time - win);
+                            if (it_curr == lead_map.end() || it_prev == lead_map.end()) continue;
+                            auto it_curr_st = it_curr->second.find(station_vfld.id);
+                            auto it_prev_st = it_prev->second.find(station_vfld.id);
+                            if (it_curr_st == it_curr->second.end() || it_prev_st == it_prev->second.end()) continue;
+                            double inc = it_curr_st->second - it_prev_st->second;
+                            if (inc < -98.0) continue;
+                            double obs_val = get_surface_value(station_vobs, pvar);
+                            if (inc > -98.0 && obs_val > -98.0) {
+                                double error = inc - obs_val;
+                                if (!is_missing(error)) {
+                                    ResultKey key = {vfld_info.experiment, vfld_info.lead_time, pvar, vfld_info.valid_time};
+                                    auto& stats = local_surface_results[key];
+                                    stats.sum_of_errors += error;
+                                    stats.sum_of_squared_errors += error*error;
+                                    stats.count++;
+                                }
+                            }
+                        }
                     }
                 }
             }

@@ -1,5 +1,6 @@
 import argparse
 import os
+import json
 import polars as pl
 import matplotlib.pyplot as plt
 from typing import Dict, Optional
@@ -35,6 +36,16 @@ def plot_series(df: pl.DataFrame, outdir: str, title_prefix: str, exp_colors: Di
         x_label = "Valid Time"
     else:
         raise ValueError(f"Unknown x_axis: {x_axis}")
+
+    # Load variable display names (surface context for this script)
+    var_name_path = os.path.join(os.path.dirname(__file__), "var_names.json")
+    var_names = {"surface": {}, "upper_air": {}}
+    if os.path.exists(var_name_path):
+        try:
+            with open(var_name_path, "r", encoding="utf-8") as f:
+                var_names = json.load(f)
+        except Exception:
+            pass
 
     obstypevars = df["obstypevar"].unique().to_list()
 
@@ -77,7 +88,14 @@ def plot_series(df: pl.DataFrame, outdir: str, title_prefix: str, exp_colors: Di
             line_handles.append(h_bias)
 
         ax.axhline(0, color='black', linestyle='-', linewidth=1)
-        title = f"{title_prefix} - {ov} - {x_label} Series"
+        entry = var_names.get("surface", {}).get(ov, ov)
+        if isinstance(entry, dict):
+            label = entry.get("label", ov)
+            unit = entry.get("unit")
+        else:
+            label, unit = entry, None
+        base_title = f"{label} [{unit}]" if unit else label
+        title = base_title
         if start_date and end_date:
             title += f"\n{start_date} - {end_date}"
         
@@ -87,7 +105,8 @@ def plot_series(df: pl.DataFrame, outdir: str, title_prefix: str, exp_colors: Di
 
         ax.set_title(title)
         ax.set_xlabel(x_label)
-        ax.set_ylabel("Value")
+        # Use variable unit on y-axis when available
+        ax.set_ylabel(unit if unit else "Value")
 
         if x_axis == "vt_hour":
             ax.xaxis.set_major_locator(mticker.MaxNLocator(nbins=10))

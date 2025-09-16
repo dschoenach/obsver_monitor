@@ -1,4 +1,5 @@
 import argparse, os
+import json
 import polars as pl
 import matplotlib.pyplot as plt
 import matplotlib.ticker as mticker
@@ -9,6 +10,21 @@ METRIC_STYLES = {
     "bias": {"linestyle": "-", "label": "Bias"}
 }
 
+def _load_var_names():
+    """Load variable name mapping JSON; return safe default on failure."""
+    var_name_path = os.path.join(os.path.dirname(__file__), "var_names.json")
+    var_names = {"surface": {}, "upper_air": {}}
+    if os.path.exists(var_name_path):
+        try:
+            import json as _json
+            with open(var_name_path, "r", encoding="utf-8") as f:
+                data = _json.load(f)
+                if isinstance(data, dict):
+                    var_names.update({k: v for k, v in data.items() if isinstance(v, dict)})
+        except Exception:
+            pass
+    return var_names
+
 def _aggregate_profile(df: pl.DataFrame) -> pl.DataFrame:
     return (df.group_by(["experiment", "pressure_level", "obstypevar"])
               .agg([
@@ -17,8 +33,9 @@ def _aggregate_profile(df: pl.DataFrame) -> pl.DataFrame:
                   pl.sum("n_samples").alias("n_sum")
               ]))
 
-def plot_temp_profiles(df: pl.DataFrame, outdir: str, exp_colors: Dict[str, str], exp_names: Dict[str, str], start_date: str, end_date: str, fcint: Optional[int], monitor_temp_cycles: Optional[int], cycles: Optional[List[int]]) -> None:
+def plot_temp_profiles(df: pl.DataFrame, outdir: str, exp_colors: Dict[str, str], exp_names: Dict[str, str], start_date: str, end_date: str, fcint: Optional[int], monitor_temp_cycles: Optional[int], cycles: Optional[List[int]]) -> None: 
     agg = _aggregate_profile(df)
+    var_names = _load_var_names()
     variables = agg["obstypevar"].unique().to_list()
 
     for var in variables:
@@ -57,7 +74,14 @@ def plot_temp_profiles(df: pl.DataFrame, outdir: str, exp_colors: Dict[str, str]
             line_handles.append(h_bias)
 
         ax.axvline(0, color='black', linestyle='-', linewidth=1)
-        title = f"Temp Profile - {var}"
+        entry = var_names.get("upper_air", {}).get(var, var)
+        if isinstance(entry, dict):
+            label = entry.get("label", var)
+            unit = entry.get("unit")
+        else:
+            label, unit = entry, None
+        base_title = f"{label} [{unit}]" if unit else label
+        title = base_title
         if start_date and end_date:
             title += f"\n{start_date} - {end_date}"
         
@@ -77,7 +101,8 @@ def plot_temp_profiles(df: pl.DataFrame, outdir: str, exp_colors: Dict[str, str]
             title += f"\n{title_line3}"
 
         ax.set_title(title)
-        ax.set_xlabel("Value")
+        # Use variable unit on x-axis for profile plots
+        ax.set_xlabel(unit if unit else "Value")
         ax.set_ylabel("Pressure (hPa)")
         ax.set_yticks(counts["pressure_level"].to_list())
         ax.invert_yaxis()
@@ -91,7 +116,7 @@ def plot_temp_profiles(df: pl.DataFrame, outdir: str, exp_colors: Dict[str, str]
         plt.close(fig)
         print(f"Saved plot: {path}")
 
-def plot_series(df: pl.DataFrame, outdir: str, exp_colors: Dict[str, str], exp_names: Dict[str, str], x_axis: str, start_date: str, end_date: str, fcint: Optional[int], monitor_temp_cycles: Optional[int], cycles: Optional[List[int]]) -> None:
+def plot_series(df: pl.DataFrame, outdir: str, exp_colors: Dict[str, str], exp_names: Dict[str, str], x_axis: str, start_date: str, end_date: str, fcint: Optional[int], monitor_temp_cycles: Optional[int], cycles: Optional[List[int]]) -> None: 
     if x_axis == "lead_time":
         agg = df.group_by(["experiment", "lead_time", "obstypevar"]).agg(pl.mean("bias"), pl.mean("rmse"), pl.sum("n_samples").alias("n_sum")).sort("lead_time")
         x_label = "Lead Time (h)"
@@ -101,6 +126,7 @@ def plot_series(df: pl.DataFrame, outdir: str, exp_colors: Dict[str, str], exp_n
     else:
         raise ValueError(f"Unknown x_axis: {x_axis}")
 
+    var_names = _load_var_names()
     variables = agg["obstypevar"].unique().to_list()
 
     for var in variables:
@@ -131,7 +157,14 @@ def plot_series(df: pl.DataFrame, outdir: str, exp_colors: Dict[str, str], exp_n
             line_handles.append(h_bias)
 
         ax.axhline(0, color='black', linestyle='-', linewidth=1)
-        title = f"Temp Series - {var} - {x_label}"
+        entry = var_names.get("upper_air", {}).get(var, var)
+        if isinstance(entry, dict):
+            label = entry.get("label", var)
+            unit = entry.get("unit")
+        else:
+            label, unit = entry, None
+        base_title = f"{label} [{unit}]" if unit else label
+        title = base_title
         if start_date and end_date:
             title += f"\n{start_date} - {end_date}"
 
@@ -152,7 +185,8 @@ def plot_series(df: pl.DataFrame, outdir: str, exp_colors: Dict[str, str], exp_n
 
         ax.set_title(title)
         ax.set_xlabel(x_label)
-        ax.set_ylabel("Value")
+        # Use variable unit on y-axis when available for series
+        ax.set_ylabel(unit if unit else "Value")
         # Match monitor_plotting.py x-axis tick density behavior
         if x_axis == "vt_hour":
             ax.xaxis.set_major_locator(mticker.MaxNLocator(nbins=10))
@@ -160,9 +194,9 @@ def plot_series(df: pl.DataFrame, outdir: str, exp_colors: Dict[str, str], exp_n
             max_lead_time = df["lead_time"].max()
             if max_lead_time is not None:
                 ax.set_xticks(range(0, max_lead_time + 1, 3))
-         ax.tick_params(axis='x', rotation=45)
-         ax.grid(True, linestyle="--", linewidth=0.5, alpha=0.7)
-         ax.legend(handles=line_handles, loc='center left', bbox_to_anchor=(1.14, 0.5), frameon=True)
+        ax.tick_params(axis='x', rotation=45)
+        ax.grid(True, linestyle="--", linewidth=0.5, alpha=0.7)
+        ax.legend(handles=line_handles, loc='center left', bbox_to_anchor=(1.14, 0.5), frameon=True)
 
         plot_dir = os.path.join(outdir, f"temp_{var}")
         os.makedirs(plot_dir, exist_ok=True)

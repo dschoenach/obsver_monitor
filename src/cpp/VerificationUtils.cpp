@@ -11,7 +11,13 @@ double get_surface_value(const SurfaceStation& s, const std::string& var) {
     else if (var == "TT") return s.tt;
     else if (var == "RH") return s.rh;
     else if (var == "PS") return s.ps;
-    else if (var == "PE") return s.pe;
+    else if (var == "PSS") return s.pss;   // NEW
+    else if (var == "PE") return s.pe;          // total (forecast only)
+    else if (var == "PE1") return s.pe1;
+    else if (var == "PE3") return s.pe3;
+    else if (var == "PE6") return s.pe6;
+    else if (var == "PE12") return s.pe12;
+    else if (var == "PE24") return s.pe24;
     else if (var == "QQ") return s.qq;
     else if (var == "VI") return s.vi;
     else if (var == "TD") return s.td;

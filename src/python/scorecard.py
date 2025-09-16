@@ -7,6 +7,18 @@ import os
 import matplotlib.pyplot as plt
 import matplotlib.patches as patches
 from sklearn.preprocessing import minmax_scale
+import json
+
+def _load_var_labels() -> dict:
+    """Load variable name labels from var_names.json next to this file."""
+    try:
+        here = os.path.dirname(__file__)
+        path = os.path.join(here, 'var_names.json')
+        with open(path, 'r', encoding='utf-8') as f:
+            return json.load(f)
+    except Exception:
+        return {}
+
 
 def plot_scorecard(df: pl.DataFrame, outdir: str, title: str, exp_names: list[str],
                    display_names: list[str], start_date: str, end_date: str,
@@ -187,7 +199,29 @@ def plot_scorecard(df: pl.DataFrame, outdir: str, title: str, exp_names: list[st
     ax.set_xlim(df_plot['lead_time'].min() - 1, df_plot['lead_time'].max() + 1)
     ax.set_ylim(-1, len(variables))
     ax.set_yticks(list(y_coords.values()))
-    ax.set_yticklabels(list(y_coords.keys()))
+
+    # Use friendly variable labels for monitor only, based on title hint
+    t_lower_for_labels = (title or "").lower()
+    labels_map = _load_var_labels() if ('monitor' in t_lower_for_labels) else {}
+    if 'surface' in t_lower_for_labels:
+        group_key = 'surface'
+    elif 'temp' in t_lower_for_labels:
+        group_key = 'upper_air'
+    else:
+        group_key = None
+
+    if labels_map and group_key and group_key in labels_map:
+        def _label_for(code: str) -> str:
+            entry = labels_map[group_key].get(code)
+            if isinstance(entry, dict):
+                return entry.get('label', code)
+            elif isinstance(entry, str):
+                return entry
+            return code
+        ytick_labels = [ _label_for(v) for v in y_coords.keys() ]
+    else:
+        ytick_labels = list(y_coords.keys())
+    ax.set_yticklabels(ytick_labels)
     # OLD:
     # ax.set_xticks(sorted(df_plot['lead_time'].unique()))
     # NEW: show only every 3rd hour
@@ -208,9 +242,25 @@ def plot_scorecard(df: pl.DataFrame, outdir: str, title: str, exp_names: list[st
     ax.set_xlabel('Lead Time (hours/days)', fontsize=12)
     ax.set_ylabel('Variable', fontsize=12)
 
+    # Enforce consistent tick label sizes across domains
+    ax.tick_params(axis='both', which='major', labelsize=11)
+    ax.tick_params(axis='both', which='minor', labelsize=10)
+
     # --- 6. Title + Legend (reverted to simpler original style) ---
     # Build multi-line title
-    full_title = f"{title}: {display_names[0]} vs {display_names[1]}"
+    # Determine domain label from provided title, but do not render the raw title
+    t_lower = (title or "").lower()
+    if "surface" in t_lower:
+        domain_label = "Surface"
+    elif "temp" in t_lower:
+        domain_label = "Upper Air"
+    else:
+        domain_label = None
+
+    if domain_label:
+        full_title = f"{domain_label}: {display_names[1]} vs {display_names[0]}"
+    else:
+        full_title = f"{display_names[1]} vs {display_names[0]}"
     if start_date and end_date:
         full_title += f"\n{start_date} - {end_date}"
     if fcint:
@@ -254,7 +304,9 @@ def plot_scorecard(df: pl.DataFrame, outdir: str, title: str, exp_names: list[st
         loc='outside upper right',
         bbox_to_anchor=(anchor_x-0.01, anchor_y+0.14),
         frameon=True,
-        borderaxespad=0.0
+        borderaxespad=0.0,
+        prop={'size': 10},
+        title_fontsize=11
     )
 
     os.makedirs(outdir, exist_ok=True)

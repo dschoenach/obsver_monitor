@@ -78,7 +78,7 @@ if [[ -f "$METRICS_FILE" && ${#EXPS[@]} -gt 1 ]]; then
   echo "Building scorecards for monitor surface metrics..."
   for i in $(seq 0 $((${#EXPS[@]} - 2))); do
     for j in $(seq $(($i + 1)) $((${#EXPS[@]} - 1))); do
-      python3 -m src.python.scorecard \
+      python3 -m src.python.scorecard_monitor \
         --exp-a "${EXPS[$i]}" \
         --exp-b "${EXPS[$j]}" \
         --exp-a-name "${EXP_NAMES[$i]}" \
@@ -98,7 +98,7 @@ if [[ -f "$TEMP_METRICS_FILE" && ${#EXPS[@]} -gt 1 ]]; then
   echo "Building scorecards for monitor temp profiles..."
   for i in $(seq 0 $((${#EXPS[@]} - 2))); do
     for j in $(seq $(($i + 1)) $((${#EXPS[@]} - 1))); do
-      python3 -m src.python.scorecard \
+      python3 -m src.python.scorecard_monitor \
         --exp-a "${EXPS[$i]}" \
         --exp-b "${EXPS[$j]}" \
         --exp-a-name "${EXP_NAMES[$i]}" \

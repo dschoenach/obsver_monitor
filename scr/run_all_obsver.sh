@@ -193,7 +193,7 @@ if [[ ${#METRICS_FILES[@]} -gt 0 && ${#EXPS[@]} -gt 1 ]]; then
   echo "Building scorecards from ${#METRICS_FILES[@]} metric files (vars: ${OBSVARS[*]})"
   for i in $(seq 0 $((${#EXPS[@]} - 2))); do
     for j in $(seq $(($i + 1)) $((${#EXPS[@]} - 1))); do
-      python3 -m src.python.scorecard \
+      python3 -m src.python.scorecard_obsver \
         --exp-a "${EXPS[$i]}" \
         --exp-b "${EXPS[$j]}" \
         --exp-a-name "${EXP_NAMES[$i]}" \

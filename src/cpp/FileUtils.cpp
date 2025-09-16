@@ -82,7 +82,13 @@ void read_data_file(const std::string& filepath, bool is_vfld, int& version_flag
             if (surface_col_map.count("TT") && static_cast<size_t>(surface_col_map.at("TT")) < data_values.size()) s.tt=data_values[surface_col_map.at("TT")];
             if (surface_col_map.count("RH") && static_cast<size_t>(surface_col_map.at("RH")) < data_values.size()) s.rh=data_values[surface_col_map.at("RH")];
             if (surface_col_map.count("PS") && static_cast<size_t>(surface_col_map.at("PS")) < data_values.size()) s.ps=data_values[surface_col_map.at("PS")];
-            if (surface_col_map.count("PE") && static_cast<size_t>(surface_col_map.at("PE")) < data_values.size()) s.pe=data_values[surface_col_map.at("PE")];
+            if (surface_col_map.count("PSS") && (size_t)surface_col_map.at("PSS") < data_values.size()) s.pss = data_values[surface_col_map.at("PSS")];
+            if (surface_col_map.count("PE")  && static_cast<size_t>(surface_col_map.at("PE"))  < data_values.size()) s.pe = data_values[surface_col_map.at("PE")];
+            if (surface_col_map.count("PE1") && static_cast<size_t>(surface_col_map.at("PE1")) < data_values.size()) s.pe1 = data_values[surface_col_map.at("PE1")];
+            if (surface_col_map.count("PE3") && static_cast<size_t>(surface_col_map.at("PE3")) < data_values.size()) s.pe3 = data_values[surface_col_map.at("PE3")];
+            if (surface_col_map.count("PE6") && static_cast<size_t>(surface_col_map.at("PE6")) < data_values.size()) s.pe6 = data_values[surface_col_map.at("PE6")];
+            if (surface_col_map.count("PE12")&& static_cast<size_t>(surface_col_map.at("PE12"))< data_values.size()) s.pe12= data_values[surface_col_map.at("PE12")];
+            if (surface_col_map.count("PE24")&& static_cast<size_t>(surface_col_map.at("PE24"))< data_values.size()) s.pe24= data_values[surface_col_map.at("PE24")];
             if (surface_col_map.count("QQ") && static_cast<size_t>(surface_col_map.at("QQ")) < data_values.size()) s.qq=data_values[surface_col_map.at("QQ")];
             if (surface_col_map.count("VI") && static_cast<size_t>(surface_col_map.at("VI")) < data_values.size()) s.vi=data_values[surface_col_map.at("VI")];
             if (surface_col_map.count("TD") && static_cast<size_t>(surface_col_map.at("TD")) < data_values.size()) s.td=data_values[surface_col_map.at("TD")];

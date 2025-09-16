@@ -25,6 +25,17 @@ $action = $_GET['action'] ?? 'get_projects';
 
 $response = [];
 
+// Load variable names mapping for display labels
+$var_names = null;
+$var_names_path = __DIR__ . '/var_names.json';
+if (file_exists($var_names_path)) {
+    $raw = file_get_contents($var_names_path);
+    $decoded = json_decode($raw, true);
+    if (is_array($decoded)) {
+        $var_names = $decoded;
+    }
+}
+
 if ($action === 'get_projects') {
     if (!is_dir($data_root)) {
         echo json_encode(['error' => 'Master output directory not found at: ' . realpath($data_root)]);
@@ -45,6 +56,7 @@ if ($action === 'get_projects') {
         // Scan all subdirectories for plots
         $subdirs = glob($plots_dir . '*', GLOB_ONLYDIR);
 
+        $labels = [];
         foreach ($subdirs as $subdir) {
             $var_name = basename($subdir);
             if ($var_name === 'files') continue;
@@ -52,6 +64,26 @@ if ($action === 'get_projects') {
             if (!isset($response[$project][$var_name])) {
                 $response[$project][$var_name] = [];
             }
+
+            // Derive display label from mapping
+            $display = $var_name;
+            if ($var_names) {
+                $group = 'surface';
+                $code = $var_name;
+                if (strpos($var_name, 'temp_') === 0) {
+                    $group = 'upper_air';
+                    $code = substr($var_name, 5);
+                }
+                if (isset($var_names[$group][$code])) {
+                    $entry = $var_names[$group][$code];
+                    if (is_array($entry) && isset($entry['label'])) {
+                        $display = $entry['label'];
+                    } elseif (is_string($entry)) {
+                        $display = $entry;
+                    }
+                }
+            }
+            $labels[$var_name] = $display;
 
             foreach (glob($subdir . '/*.png') as $file) {
                 $plot_type = basename($file, '.png');
@@ -71,6 +103,11 @@ if ($action === 'get_projects') {
             }
         }
 
+        // Attach labels map for this project
+        if (!empty($labels)) {
+            $response[$project]['_var_labels'] = $labels;
+        }
+
         // Find top-level plots (like scorecards)
         $top_level_plots = glob($plots_dir . '*.png');
         foreach ($top_level_plots as $file) {
@@ -79,7 +116,28 @@ if ($action === 'get_projects') {
                 if (!isset($response[$project]['Scorecards'])) {
                     $response[$project]['Scorecards'] = [];
                 }
-                $response[$project]['Scorecards'][$filename] = 'image.php?path=' . str_replace($data_root, '', $file);
+
+                $imgPath = 'image.php?path=' . str_replace($data_root, '', $file);
+
+                // For 'monitor' project, group surface + upper-air under a pair label like "REF vs. rednmc04"
+                if ($project === 'monitor') {
+                    // Expected filenames: monitor_surface_A_vs_B_scorecard.png or monitor_temp_A_vs_B_scorecard.png
+                    if (preg_match('/^monitor_(surface|temp)_(.+)_scorecard$/i', $filename, $m)) {
+                        $domain = strtolower($m[1]);
+                        $pairRaw = $m[2]; // e.g., REF_vs_rednmc04
+                        // Build display key with "vs." between names
+                        $pairKey = str_replace('_vs_', ' vs. ', $pairRaw);
+                        if (!isset($response[$project]['Scorecards'][$pairKey]) || !is_array($response[$project]['Scorecards'][$pairKey])) {
+                            $response[$project]['Scorecards'][$pairKey] = [];
+                        }
+                        $domainKey = ($domain === 'surface') ? 'surface' : 'upper_air';
+                        $response[$project]['Scorecards'][$pairKey][$domainKey] = $imgPath;
+                        continue;
+                    }
+                }
+
+                // Fallback: keep flat mapping (used by obsver or unknown patterns)
+                $response[$project]['Scorecards'][$filename] = $imgPath;
             }
         }
     }

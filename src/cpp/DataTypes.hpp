@@ -9,8 +9,11 @@ struct SurfaceStation {
     int id = -1;
     double lat = -999.0, lon = -999.0, hgt = -999.0;
     double nn = -999.0, dd = -999.0, ff = -999.0, tt = -999.0, rh = -999.0, ps = -999.0;
+    double pss = -999.0; // NEW mean sea-level pressure
     double pe = -999.0, qq = -999.0, vi = -999.0, td = -999.0, tx = -999.0, tn = -999.0;
     double gg = -999.0, gx = -999.0, fx = -999.0;
+    // Added observed precipitation accumulation windows
+    double pe1 = -999.0, pe3 = -999.0, pe6 = -999.0, pe12 = -999.0, pe24 = -999.0;
 };
 
 struct TempLevel {
