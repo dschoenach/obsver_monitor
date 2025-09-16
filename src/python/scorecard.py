@@ -1,4 +1,5 @@
 import argparse
+import os
 import glob
 import math
 import polars as pl
@@ -19,6 +20,26 @@ def _load_var_labels() -> dict:
             return json.load(f)
     except Exception:
         return {}
+
+
+def _parse_env_list(name: str) -> list[str]:
+    val = os.environ.get(name, "").strip()
+    return [tok for tok in val.split() if tok]
+
+
+def _order_variables_for_monitor(title: str, vars_found: list[str]) -> list[str]:
+    t = (title or "").lower()
+    order_env = None
+    if "surface" in t:
+        order_env = _parse_env_list("SURFPAR_MONITOR")
+    elif "temp" in t:
+        order_env = _parse_env_list("TEMPPAR_MONITOR")
+    if not order_env:
+        return sorted(vars_found)
+    seen = set()
+    ordered = [v for v in order_env if v in vars_found and not (v in seen or seen.add(v))]
+    rest = sorted([v for v in vars_found if v not in set(ordered)])
+    return ordered + rest
 
 
 def plot_scorecard(df: pl.DataFrame, outdir: str, title: str, exp_names: list[str],
@@ -192,7 +213,7 @@ def plot_scorecard(df: pl.DataFrame, outdir: str, title: str, exp_names: list[st
     ax_legend.set_axis_off()
 
     # Map variable names to y-axis coordinates for plotting
-    variables = sorted(df_plot['obstypevar'].unique())
+    variables = _order_variables_for_monitor(title, list(df_plot['obstypevar'].unique()))
     y_coords = {var: i for i, var in enumerate(variables)}
 
     # --- 4. Loop through the data and draw each tile ---
