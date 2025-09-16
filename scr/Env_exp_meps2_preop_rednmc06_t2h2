@@ -1,0 +1,159 @@
+#!/bin/bash
+set -e
+
+# --- Master Configuration ---
+# All results will go into this single directory
+export MASTER_OUTPUT="out/Env_exp_meps2_preop_rednmc06_04_02"
+
+# --- Experiment Configuration ---
+export MONITOR_EXP_BASES="meps2_preop_rednmc06mbr000 meps2_preop_rednmc06_t2h2mbr000"
+export MONITOR_EXP_NAMES="ref t2h2"
+export EXP_COLORS_MONITOR="#0072B2 #E69F00" # number must be the same as Experiments
+#0072B2 (blue)
+#E69F00 (orange)
+#009E73 (teal/green)
+# --- Date/Time Configuration ---
+export START_MONITOR="2025070200"
+export END_MONITOR="2025080321"
+export FCINT_MONITOR=12
+# Monitor specific settings
+
+# Monitor variable order (affects verification + webapp)
+export SURFPAR_MONITOR="PS SPS FF GX DD TT TTHA TN TX TD TDD RH QQ NN LC CH PE1 PE3 PE6 PE12 VI"
+export TEMPPAR_MONITOR="TT TD FF DD FI RH QQ"
+export MONITOR_TEMP_CYCLES="6" # which observations in the monitor-temp profile and timeseries plots, every 6th hour
+
+
+
+# Names for Obsver (used in file names and python scripts)
+export OBSVER_EXP_BASES=$MONITOR_EXP_BASES
+export OBSVER_EXP_NAMES=$MONITOR_EXP_NAMES
+export EXP_COLORS_OBSVER=$EXP_COLORS_MONITOR # number must be the same as MONITOR Experiments
+
+# --- Date/Time Configuration ---
+export START_OBSVER=$START_MONITOR
+export END_OBSVER=$END_MONITOR
+export FCINT_OBSVER=$FCINT_MONITOR
+
+
+# --- Obsver Specific Configuration ---
+export OBSVARS="atms_tb amsua_tb mhs_tb mwhs2_tb airep_t airep_u airep_v ascat_dd ascat_ff temp_q temp_t temp_u temp_v"
+export OBSVER_HOURS="06 09 12 15 18 21 24"
+export USE_COMMON_KEYS=1
+export ROUND_DEC=2
+export GENERATE_LEADTIME_PLOTS=0 # Set to 0 to disable per-lead-time plots in obsver
+
+
+# ==================================================
+#         STARTING COMPLETE VERIFICATION SUITE
+# ==================================================
+echo "Cleaning and creating master output at: ${MASTER_OUTPUT}"
+rm -rf "${MASTER_OUTPUT}"
+mkdir -p "${MASTER_OUTPUT}"
+
+MONITOR=1
+if [ $MONITOR -eq 1 ]; then
+    echo -e "\n----- Monitor Verification Enabled -----"
+# --- Run Monitor Verification ---
+echo -e "\n----- Running Monitor Workflow -----"
+# We set the environment variable that run_all_monitor.sh will now use
+export MONITOR_OUTPUT="${MASTER_OUTPUT}/monitor"
+bash scr/run_all_monitor.sh
+else
+    echo -e "\n----- Monitor Verification Disabled -----"
+fi
+
+OBSVER=1
+if [ $OBSVER -eq 1 ]; then
+    echo -e "\n----- Obsver Verification Enabled -----"
+# --- Run Obsver Verification ---
+echo -e "\n----- Running Obsver Workflow -----"
+# We set the environment variable that run_all_obsver.sh will now use
+export OBSVER_OUTPUT="${MASTER_OUTPUT}/obsver"
+bash scr/run_all_obsver.sh
+else
+    echo -e "\n----- Obsver Verification Disabled -----"
+fi
+
+
+echo -e "\n=================================================="
+echo "    COMPLETE VERIFICATION SUITE FINISHED"
+echo "    Results are in: ${MASTER_OUTPUT}"
+echo "=================================================="
+
+pwd
+rm -rf '"'
+# full path of MASTER_OUTPUT
+echo "Open locally with:"
+FULL_MASTER_OUTPUT=$(realpath ${MASTER_OUTPUT})
+echo VERIF_DATA_PATH="${FULL_MASTER_OUTPUT}" php -S localhost:8000 -t webapp
+
+# --- Generate Static Webapp ---
+echo -e "
+----- Generating Static Webapp -----"
+WEBAPP_OUTPUT="${MASTER_OUTPUT}_webapp"
+FULL_WEBAPP_OUTPUT=$(realpath ${MASTER_OUTPUT}_webapp)
+echo "Creating static webapp at: ${WEBAPP_OUTPUT}"
+rm -rf "${WEBAPP_OUTPUT}"
+mkdir -p "${WEBAPP_OUTPUT}"
+
+# Generate JSON data
+VERIF_DATA_PATH="${FULL_MASTER_OUTPUT}" php webapp/api.php > "${WEBAPP_OUTPUT}/projects.json"
+if [ $MONITOR -eq 1 ]; then
+    echo "Generating Monitor scorecard"
+VERIF_DATA_PATH="${FULL_MASTER_OUTPUT}" php webapp/api.php -- --action get_scorecard_data --project monitor > "${WEBAPP_OUTPUT}/monitor_scorecard.json"
+fi
+if [ $OBSVER -eq 1 ]; then
+    echo "Generating Obsver scorecard"
+VERIF_DATA_PATH="${FULL_MASTER_OUTPUT}" php webapp/api.php -- --action get_scorecard_data --project obsver > "${WEBAPP_OUTPUT}/obsver_scorecard.json"
+fi
+
+# Copy webapp files
+cp webapp/index.php "${WEBAPP_OUTPUT}/index.html"
+mkdir -p "${WEBAPP_OUTPUT}/js"
+cp webapp/js/main.js "${WEBAPP_OUTPUT}/js/main.js"
+# Inject monitor order config for the static bundle
+{
+  echo "window.MONITOR_VAR_ORDER = {" > "${WEBAPP_OUTPUT}/js/config.js"
+  # Surf order
+  echo -n "  surf: [" >> "${WEBAPP_OUTPUT}/js/config.js"
+  first=1
+  for v in ${SURFPAR_MONITOR}; do
+    if [ $first -eq 1 ]; then first=0; else echo -n ", " >> "${WEBAPP_OUTPUT}/js/config.js"; fi
+    echo -n "\"$v\"" >> "${WEBAPP_OUTPUT}/js/config.js"
+  done
+  echo "]," >> "${WEBAPP_OUTPUT}/js/config.js"
+  # Temp order
+  echo -n "  temp: [" >> "${WEBAPP_OUTPUT}/js/config.js"
+  first=1
+  for v in ${TEMPPAR_MONITOR}; do
+    if [ $first -eq 1 ]; then first=0; else echo -n ", " >> "${WEBAPP_OUTPUT}/js/config.js"; fi
+    echo -n "\"$v\"" >> "${WEBAPP_OUTPUT}/js/config.js"
+  done
+  echo "]\n};" >> "${WEBAPP_OUTPUT}/js/config.js"
+}
+sed -i 's#<script src="js/main.js"></script>#<script src="js/config.js"></script>\n    <script src="js/main.js"></script>#' "${WEBAPP_OUTPUT}/index.html"
+mkdir -p "${WEBAPP_OUTPUT}/css"
+cp webapp/css/style.css "${WEBAPP_OUTPUT}/css/style.css"
+
+# Copy images
+if [ $MONITOR -eq 1 ]; then
+cp -r "${MASTER_OUTPUT}/monitor" "${WEBAPP_OUTPUT}/"
+fi
+if [ $OBSVER -eq 1 ]; then
+cp -r "${MASTER_OUTPUT}/obsver" "${WEBAPP_OUTPUT}/"
+fi
+
+# Modify files for static hosting
+sed -i 's/image.php?path=//g' "${WEBAPP_OUTPUT}/projects.json"
+sed -i 's#\\/#/#g' "${WEBAPP_OUTPUT}/projects.json"
+sed -i "s/api.php?action=get_projects/projects.json/g" "${WEBAPP_OUTPUT}/js/main.js"
+sed -i 's|api.php?action=get_scorecard_data&project=${projectName}|${projectName}_scorecard.json|g' "${WEBAPP_OUTPUT}/js/main.js"
+
+echo -e "
+=================================================="
+echo "    STATIC WEBAPP GENERATED"
+echo "    Results are in: ${WEBAPP_OUTPUT}"
+echo "=================================================="
+
+echo php -S localhost:8000 -t $FULL_WEBAPP_OUTPUT

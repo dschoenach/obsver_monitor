@@ -1,4 +1,6 @@
-// verify_cpp_parallel.cpp (Simplified: All common key logic removed)
+// verify_cpp_parallel.cpp
+// Note: Restricts processing to common valid_time across all experiments
+// (no station/level key intersection; dates-only for speed and simplicity)
 #include "DataTypes.hpp"
 #include "FileUtils.hpp"
 #include "VerificationUtils.hpp"
@@ -47,6 +49,9 @@ int main(int argc, char* argv[]) {
     
     std::vector<FileInfo> vfld_files;
     std::vector<FileInfo> vobs_files;
+    // Track valid_time availability per experiment and for observations
+    std::unordered_map<std::string, std::unordered_set<long long>> exp_valid_times;
+    std::unordered_set<long long> vobs_valid_times;
     std::cout << "Discovering and parsing filenames..." << std::endl;
     for (const auto& exp_path_raw : experiment_paths) {
         fs::path exp_path = exp_path_raw;
@@ -58,6 +63,7 @@ int main(int argc, char* argv[]) {
                 if (info.type == "vfld" && info.base_time >= start_dt && info.base_time <= end_dt && (info.base_time % 100) % fcint == 0) {
                     info.experiment = experiment_name;
                     vfld_files.push_back(info);
+                    exp_valid_times[experiment_name].insert(info.valid_time);
                 }
             }
         }
@@ -69,9 +75,36 @@ int main(int argc, char* argv[]) {
         // Filter vobs by start/end like vfld (using valid_time)
         if (info.valid_time >= start_dt && info.valid_time <= end_dt) {
             vobs_files.push_back(info);
+            vobs_valid_times.insert(info.valid_time);
         }
     }
-    std::cout << "Found " << vobs_files.size() << " vobs files and " << vfld_files.size() << " vfld files to process." << std::endl;
+    std::cout << "Found " << vobs_files.size() << " vobs files and " << vfld_files.size() << " vfld files (pre-filter)." << std::endl;
+
+    // Compute intersection of valid_time across all experiments, then intersect with available vobs times
+    std::unordered_set<long long> common_valid_times;
+    bool first_exp = true;
+    for (const auto& kv : exp_valid_times) {
+        const auto& times = kv.second;
+        if (first_exp) {
+            common_valid_times = times;
+            first_exp = false;
+        } else {
+            std::unordered_set<long long> tmp;
+            for (auto t : common_valid_times) if (times.find(t) != times.end()) tmp.insert(t);
+            common_valid_times.swap(tmp);
+        }
+    }
+    if (!first_exp) { // if we had at least one experiment, also require vobs availability
+        std::unordered_set<long long> tmp;
+        for (auto t : common_valid_times) if (vobs_valid_times.find(t) != vobs_valid_times.end()) tmp.insert(t);
+        common_valid_times.swap(tmp);
+    }
+
+    std::cout << "Experiments: " << exp_valid_times.size() << ", common valid times with vobs: " << common_valid_times.size() << std::endl;
+    if (common_valid_times.empty()) {
+        std::cerr << "Error: No common valid times across experiments (and vobs) within given range." << std::endl;
+        return 1;
+    }
     if (vfld_files.empty() || vobs_files.empty()) { std::cerr << "Error: No data files found." << std::endl; return 1; }
 
     // Helper to parse space-delimited env lists
@@ -170,6 +203,8 @@ int main(int argc, char* argv[]) {
         #pragma omp for nowait
         for (size_t i = 0; i < vfld_files.size(); ++i) {
             const auto& vfld_info = vfld_files[i];
+            // Enforce common valid_time across all experiments and vobs
+            if (common_valid_times.find(vfld_info.valid_time) == common_valid_times.end()) { continue; }
             auto it_vobs = vobs_data_map.find(vfld_info.valid_time);
             if (it_vobs == vobs_data_map.end()) { continue; }
             
