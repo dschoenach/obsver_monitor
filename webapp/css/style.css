@@ -119,19 +119,20 @@ header h1 {
 }
 
 #plot-container {
-    text-align: center;
+    text-align: left;
     min-height: 500px;
 }
 
 .plot-display {
-    max-width: 50%;
+    max-width: 25%;
+    height: auto;
     border: 1px solid #ccc;
     cursor: zoom-in;
     transition: max-width 0.2s ease-in-out;
 }
 
 .plot-display.zoomed {
-    max-width: 100%;
+    max-width: 75%;
     cursor: zoom-out;
 }
 

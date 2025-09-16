@@ -8,6 +8,7 @@ import matplotlib.pyplot as plt
 import matplotlib.patches as patches
 from sklearn.preprocessing import minmax_scale
 import json
+import matplotlib.gridspec as gridspec
 
 def _load_var_labels() -> dict:
     """Load variable name labels from var_names.json next to this file."""
@@ -163,7 +164,32 @@ def plot_scorecard(df: pl.DataFrame, outdir: str, title: str, exp_names: list[st
     df_plot['border_color'] = np.where(df_plot['is_significant'], 'black', 'none')
 
     # --- 3. Set up the plot ---
-    fig, ax = plt.subplots(figsize=(16, 9))
+    n_vars = len(set(df_plot['obstypevar']))
+    fig_w = 12.0
+
+    # Top strip fixed to 3 cm; bottom height scales with number of variables
+    top_h_in = 3.0 / 2.54
+    per_row_h = 0.35
+    base_plot_h = 2.6
+    bottom_h_in = max(4.0, base_plot_h + per_row_h * n_vars)
+
+    fig_h = top_h_in + bottom_h_in
+    fig = plt.figure(figsize=(fig_w, fig_h))
+
+    # Wider left margin for long variable names; keep some right padding
+    gs = gridspec.GridSpec(
+        nrows=2, ncols=2,
+        height_ratios=[top_h_in, bottom_h_in],
+        width_ratios=[1.35, 0.65],            # give legend panel enough space
+        left=0.26, right=0.97, top=0.98, bottom=0.10,
+        wspace=0.20, hspace=0.08
+    )
+
+    ax_title = fig.add_subplot(gs[0, 0])
+    ax_legend = fig.add_subplot(gs[0, 1])
+    ax = fig.add_subplot(gs[1, :])  # main scorecard axis spans both columns
+    ax_title.set_axis_off()
+    ax_legend.set_axis_off()
 
     # Map variable names to y-axis coordinates for plotting
     variables = sorted(df_plot['obstypevar'].unique())
@@ -195,7 +221,8 @@ def plot_scorecard(df: pl.DataFrame, outdir: str, title: str, exp_names: list[st
         ax.add_patch(rect)
 
     # --- 5. Finalize and style the plot ---
-    ax.set_aspect(2)
+    # Do not enforce a fixed aspect ratio; allow width to remain
+    # constant while height adapts to the number of variables.
     ax.set_xlim(df_plot['lead_time'].min() - 1, df_plot['lead_time'].max() + 1)
     ax.set_ylim(-1, len(variables))
     ax.set_yticks(list(y_coords.values()))
@@ -240,15 +267,15 @@ def plot_scorecard(df: pl.DataFrame, outdir: str, title: str, exp_names: list[st
         xticks = all_leads
     ax.set_xticks(xticks)
     ax.set_xlabel('Lead Time (hours/days)', fontsize=12)
-    ax.set_ylabel('Variable', fontsize=12)
+    #ax.set_ylabel('Variable', fontsize=12)
 
     # Enforce consistent tick label sizes across domains
     ax.tick_params(axis='both', which='major', labelsize=11)
     ax.tick_params(axis='both', which='minor', labelsize=10)
 
-    # --- 6. Title + Legend (reverted to simpler original style) ---
-    # Build multi-line title
-    # Determine domain label from provided title, but do not render the raw title
+    # --- 6. Title + Legend using dedicated top subplots ---
+
+    # Build multi-line title (left-aligned) in the title axis
     t_lower = (title or "").lower()
     if "surface" in t_lower:
         domain_label = "Surface"
@@ -258,18 +285,23 @@ def plot_scorecard(df: pl.DataFrame, outdir: str, title: str, exp_names: list[st
         domain_label = None
 
     if domain_label:
-        full_title = f"{domain_label}: {display_names[1]} vs {display_names[0]}"
+        title_line1 = f"{domain_label}: {display_names[1]} vs {display_names[0]}"
     else:
-        full_title = f"{display_names[1]} vs {display_names[0]}"
+        title_line1 = f"{display_names[1]} vs {display_names[0]}"
+
+    lines = [title_line1]
     if start_date and end_date:
-        full_title += f"\n{start_date} - {end_date}"
+        lines.append(f"{start_date} - {end_date}")
     if fcint:
-        fcint_hours = ", ".join(f"{h:02d}" for h in range(0, 24, fcint))
-        full_title += f"\n{fcint_hours} UTC"
+        lines.append(f"00, {fcint} UTC")
 
-    ax.set_title(full_title, fontsize=16, loc='left', pad=30)
+    ax_title.text(
+        0.0, 1.0, "\n".join(lines),
+        ha='left', va='top',
+        fontsize=16, transform=ax_title.transAxes, linespacing=1.15
+    )
 
-    # Legend (outside upper-right of plotting area)
+    # Legend in the right-top panel (fully visible, not clipped)
     legend_elements = [
         patches.Patch(facecolor='steelblue', edgecolor='black', alpha=0.8,
                       label='Positive (Significant)', linewidth=1.5),
@@ -280,38 +312,21 @@ def plot_scorecard(df: pl.DataFrame, outdir: str, title: str, exp_names: list[st
         patches.Patch(facecolor='#b2182b', edgecolor='black', alpha=0.8,
                       label='Negative (Significant)', linewidth=1.5),
     ]
-
-    # Draw to get the true axes position
-    fig.canvas.draw()
-    ax_bb = ax.get_position()  # in figure fraction (x0,y0,x1,y1)
-
-    # Try to place legend just outside the axes' right edge, aligned with its top
-    gap = 0.01
-    anchor_x = ax_bb.x1 + gap
-    anchor_y = ax_bb.y1
-
-    if anchor_x > 0.95:
-        # Not enough space: shrink axes width, then recompute
-        plt.subplots_adjust(right=0.75)
-        fig.canvas.draw()
-        ax_bb = ax.get_position()
-        anchor_x = min(0.97, ax_bb.x1 + gap)
-        anchor_y = ax_bb.y1
-
-    fig.legend(
+    ax_legend.legend(
         handles=legend_elements,
         title=f"{display_names[1]} vs {display_names[0]}",
-        loc='outside upper right',
-        bbox_to_anchor=(anchor_x-0.01, anchor_y+0.14),
-        frameon=True,
-        borderaxespad=0.0,
-        prop={'size': 10},
-        title_fontsize=11
+        loc='upper left',
+        frameon=True, borderaxespad=0.0,
+        prop={'size': 10}, title_fontsize=11,
+        handlelength=1.6, borderpad=0.6, labelspacing=0.5
     )
 
     os.makedirs(outdir, exist_ok=True)
     out_path = os.path.join(outdir, f"{title}_scorecard.png")
-    fig.savefig(out_path, dpi=170, bbox_inches='tight')
+    # Save with a consistent pixel size so on-screen font sizes appear
+    # uniform across domains; avoid automatic "tight" shrinking which can
+    # change the output pixel size per plot content.
+    fig.savefig(out_path, dpi=170)
     plt.close(fig)
     print(f"Saved plot: {out_path}")
     # --- End of new plotting logic ---
