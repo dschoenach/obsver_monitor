@@ -6,4 +6,4 @@ src/python/__pycache__/
 __pycache__/
 *.py
 webapp/data
-
+AGENTS.md
