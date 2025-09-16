@@ -14,7 +14,7 @@ export EXP_COLORS_MONITOR="#0072B2 #E69F00" # number must be the same as Experim
 #009E73 (teal/green)
 # --- Date/Time Configuration ---
 export START_MONITOR="2025070200"
-export END_MONITOR="2025080321"
+export END_MONITOR="2025070321"
 export FCINT_MONITOR=12
 # Monitor specific settings
 export MONITOR_TEMP_CYCLES="6" # which observations in the monitor-temp profile and timeseries plots, every 6th hour

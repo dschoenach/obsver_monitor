@@ -74,8 +74,8 @@ $(document).ready(function() {
         const nav = $('#category-nav');
         nav.empty().append('<h2>Categories</h2>');
         let categories = project === 'monitor' 
-            ? ['FCVER_SURF', 'FCVER_VERT', 'FCTS_SURF', 'FCTS_VERT', 'TEMPPROF', 'Scorecards'] 
-            : ['PROF', 'TS', 'Scorecards'];
+            ? ['Scorecards', 'FCVER_SURF', 'FCVER_VERT', 'FCTS_SURF', 'FCTS_VERT', 'TEMPPROF'] 
+            : ['Scorecards', 'PROF', 'TS'];
         
         categories.forEach(c => {
             const label = c === 'Scorecards' ? 'Scorecards' : (categoryDisplay[project]?.[c] || c);
@@ -124,8 +124,8 @@ $(document).ready(function() {
     // Helper: find first category that has at least one variable (in order)
     function findFirstCategoryAndVariable(project) {
         const categories = project === 'monitor'
-            ? ['FCVER_SURF', 'FCVER_VERT', 'FCTS_SURF', 'FCTS_VERT', 'TEMPPROF', 'Scorecards']
-            : ['PROF', 'TS', 'Scorecards'];
+            ? ['Scorecards', 'FCVER_SURF', 'FCVER_VERT', 'FCTS_SURF', 'FCTS_VERT', 'TEMPPROF']
+            : ['Scorecards', 'PROF', 'TS'];
 
         for (const cat of categories) {
             if (cat === 'Scorecards') {
@@ -162,10 +162,8 @@ $(document).ready(function() {
                 if (first.category) {
                     activeSelections.category = first.category;
                     const vars = populateVariables(value, first.category);
-                    // Trust the helper’s variable if still present, else fallback
-                    activeSelections.variable = first.variable && vars.includes(first.variable)
-                        ? first.variable
-                        : (vars[0] || null);
+                    // Always default to the first item in the rendered list
+                    activeSelections.variable = (vars[0] || null);
                 } else {
                     // No categories with variables
                     $('#variable-nav').empty().append('<h2>Variables</h2>');
@@ -272,28 +270,22 @@ $(document).ready(function() {
         // Toggle off: revert to single selection using current active variable
         if (showAllVariables) {
             showAllVariables = false;
-            // Restore previous variable if available and still valid; else fallback to first
-            const plotType = categoryMap[project]?.[category];
-            const wantsVertical = categoryWantsVertical(project, category);
-            const allVars = Object.keys(projectData[project] || {})
-                .filter(v => v !== 'Scorecards' && !v.startsWith('_') && projectData[project][v]?.[plotType]
-                    && (wantsVertical === null || isVerticalVar(v) === wantsVertical))
-                .sort();
-            if (previousVariable && allVars.includes(previousVariable)) {
+            // Rebuild variable list (label-sorted) and update button label,
+            // then restore previous variable if possible; else pick first in list.
+            const vars = populateVariables(project, category);
+            if (previousVariable && vars.includes(previousVariable)) {
                 activeSelections.variable = previousVariable;
-            } else if (allVars.length) {
-                activeSelections.variable = allVars[0];
-                previousVariable = activeSelections.variable;
             } else {
-                activeSelections.variable = null;
+                activeSelections.variable = vars[0] || null;
+                previousVariable = activeSelections.variable;
             }
-            // Rebuild variable list and update button label
-            populateVariables(project, category);
             renderUI();
             return;
         }
 
         // Toggle on: show all variables in this category
+        // Remember current variable to restore after hiding all
+        previousVariable = activeSelections.variable;
         const plotContainer = $('#plot-container');
         plotContainer.empty().css('text-align', 'left');
         let plotsFound = 0;
