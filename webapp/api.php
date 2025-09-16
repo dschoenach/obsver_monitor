@@ -136,8 +136,13 @@ if ($action === 'get_projects') {
                     }
                 }
 
-                // Fallback: keep flat mapping (used by obsver or unknown patterns)
-                $response[$project]['Scorecards'][$filename] = $imgPath;
+                // Fallback: flat mapping (used by obsver or unknown patterns)
+                // Clean common pattern: "Scorecard_<PAIR>_scorecard" => "<PAIR>"
+                $displayKey = $filename;
+                if (preg_match('/^Scorecard_(.+?)_scorecard$/i', $filename, $m)) {
+                    $displayKey = $m[1];
+                }
+                $response[$project]['Scorecards'][$displayKey] = $imgPath;
             }
         }
     }
