@@ -314,7 +314,7 @@ def plot_scorecard(df: pl.DataFrame, outdir: str, title: str, exp_names: list[st
     ]
     ax_legend.legend(
         handles=legend_elements,
-        title=f"{display_names[1]} vs {display_names[0]}",
+        title=f"{display_names[1]} > {display_names[0]}",
         loc='upper left',
         frameon=True, borderaxespad=0.0,
         prop={'size': 10}, title_fontsize=11,

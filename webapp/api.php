@@ -125,8 +125,14 @@ if ($action === 'get_projects') {
                     if (preg_match('/^monitor_(surface|temp)_(.+)_scorecard$/i', $filename, $m)) {
                         $domain = strtolower($m[1]);
                         $pairRaw = $m[2]; // e.g., REF_vs_rednmc04
-                        // Build display key with "vs." between names
-                        $pairKey = str_replace('_vs_', ' vs. ', $pairRaw);
+                        // Build display key in reversed order "B vs A" to match plot titles
+                        $pairKey = $pairRaw;
+                        $parts = explode('_vs_', $pairRaw, 2);
+                        if (count($parts) === 2) {
+                            $pairKey = $parts[1] . ' vs ' . $parts[0];
+                        } else {
+                            $pairKey = str_replace('_vs_', ' vs ', $pairRaw);
+                        }
                         if (!isset($response[$project]['Scorecards'][$pairKey]) || !is_array($response[$project]['Scorecards'][$pairKey])) {
                             $response[$project]['Scorecards'][$pairKey] = [];
                         }
@@ -137,10 +143,17 @@ if ($action === 'get_projects') {
                 }
 
                 // Fallback: flat mapping (used by obsver or unknown patterns)
-                // Clean common pattern: "Scorecard_<PAIR>_scorecard" => "<PAIR>"
+                // Clean common pattern and reverse pair order to match plotting titles:
+                //   "Scorecard_A_vs_B_scorecard" => "B vs A"
                 $displayKey = $filename;
                 if (preg_match('/^Scorecard_(.+?)_scorecard$/i', $filename, $m)) {
-                    $displayKey = $m[1];
+                    $pair = $m[1];
+                    if (strpos($pair, '_vs_') !== false) {
+                        $parts = explode('_vs_', $pair, 2);
+                        $displayKey = $parts[1] . ' vs ' . $parts[0];
+                    } else {
+                        $displayKey = $pair;
+                    }
                 }
                 $response[$project]['Scorecards'][$displayKey] = $imgPath;
             }
