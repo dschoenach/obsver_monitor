@@ -137,8 +137,27 @@ $(document).ready(function() {
 
         // Sort according to fixed order for monitor; else by label
         relevantVars = sortByFixedOrder(relevantVars, project, category, labels);
+        // Format label helper (handles scorecard pair cleanup if API output is raw)
+        const formatScorecardPair = (name) => {
+            // If already nicely formatted (contains ' vs '), return as-is
+            if (name.includes(' vs ')) return name;
+            // Strip common wrappers like 'Scorecard_..._scorecard'
+            let core = name;
+            const m = name.match(/^Scorecard_(.+)_scorecard$/i);
+            if (m) core = m[1];
+            // Reverse A_vs_B -> B vs A
+            if (core.includes('_vs_')) {
+                const [a, b] = core.split('_vs_', 2);
+                return `${b} vs ${a}`;
+            }
+            return core;
+        };
+
         relevantVars.forEach(v => {
-            const label = labels[v] || v;
+            let label = labels[v] || v;
+            if (category === 'Scorecards') {
+                label = formatScorecardPair(label);
+            }
             nav.append(`<a href="#" data-variable="${v}">${label}</a>`);
         });
 
@@ -320,7 +339,17 @@ $(document).ready(function() {
             if (category === 'Scorecards') {
                 const entry = projectData[project]['Scorecards'][variable];
                 if (entry) {
-                    const sectionTitle = $('<h3>').text(variable);
+                    const sectionTitle = $('<h3>').text((() => {
+                        // Mirror the same pair formatting for section titles
+                        const m = String(variable).match(/^Scorecard_(.+)_scorecard$/i);
+                        const core = m ? m[1] : String(variable);
+                        if (core.includes(' vs ')) return core;
+                        if (core.includes('_vs_')) {
+                            const [a, b] = core.split('_vs_', 2);
+                            return `${b} vs ${a}`;
+                        }
+                        return core;
+                    })());
                     plotContainer.append(sectionTitle);
                     if (typeof entry === 'object') {
                         if (entry.surface) {

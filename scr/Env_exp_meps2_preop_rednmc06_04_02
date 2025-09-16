@@ -7,14 +7,14 @@ export MASTER_OUTPUT="out/Env_exp_meps2_preop_rednmc06_04_02"
 
 # --- Experiment Configuration ---
 export MONITOR_EXP_BASES="meps2_preop_rednmc06mbr000 meps2_preop_rednmc04mbr000 meps2_preop_rednmc02mbr000"
-export MONITOR_EXP_NAMES="REF rednmc04 rednmc02"
+export MONITOR_EXP_NAMES="rednmc06 rednmc04 rednmc02"
 export EXP_COLORS_MONITOR="#0072B2 #E69F00 #009E73" # number must be the same as Experiments
 #0072B2 (blue)
 #E69F00 (orange)
 #009E73 (teal/green)
 # --- Date/Time Configuration ---
 export START_MONITOR="2025070200"
-export END_MONITOR="2025070321"
+export END_MONITOR="2025080321"
 export FCINT_MONITOR=12
 # Monitor specific settings
 
@@ -27,7 +27,7 @@ export MONITOR_TEMP_CYCLES="6" # which observations in the monitor-temp profile 
 
 # Names for Obsver (used in file names and python scripts)
 export OBSVER_EXP_BASES="meps2_preop_rednmc06mbr000 meps2_preop_rednmc04mbr000 meps2_preop_rednmc02mbr000"
-export OBSVER_EXP_NAMES="REF rednmc04 rednmc02"
+export OBSVER_EXP_NAMES="rednmc06 rednmc04 rednmc02"
 export EXP_COLORS_OBSVER="#0072B2 #E69F00 #009E73" # number must be the same as MONITOR Experiments
 
 # --- Date/Time Configuration ---
@@ -63,7 +63,7 @@ else
     echo -e "\n----- Monitor Verification Disabled -----"
 fi
 
-OBSVER=0
+OBSVER=1
 if [ $OBSVER -eq 1 ]; then
     echo -e "\n----- Obsver Verification Enabled -----"
 # --- Run Obsver Verification ---
