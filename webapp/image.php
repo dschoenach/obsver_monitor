@@ -3,7 +3,24 @@
 
 // The root directory where project data is stored.
 // It's configured via an environment variable 'VERIF_DATA_PATH' when starting the PHP server.
-$user_path = getenv('VERIF_DATA_PATH') ?: 'webapp/out/unified_verification';
+$project_name = getenv('VERIF_PROJECT_NAME');
+if (!$project_name) {
+    $project_name_file = __DIR__ . '/project_name';
+    if (is_file($project_name_file)) {
+        $project_name = trim(file_get_contents($project_name_file));
+    }
+}
+if (!$project_name) {
+    $project_name = 'unified_verification';
+}
+$default_root = __DIR__ . '/out/' . $project_name;
+if (!is_dir($default_root)) {
+    $fallback_root = __DIR__ . '/out/unified_verification';
+    if (is_dir($fallback_root)) {
+        $default_root = $fallback_root;
+    }
+}
+$user_path = getenv('VERIF_DATA_PATH') ?: $default_root;
 
 // Handle both absolute and relative paths.
 if (substr($user_path, 0, 1) === '/') {

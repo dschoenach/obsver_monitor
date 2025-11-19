@@ -3,7 +3,9 @@ set -e
 
 # --- Master Configuration ---
 # All results will go into this single directory
-export MASTER_OUTPUT="out/Env_exp_meps2_preop_rednmc06_04_02"
+export PROJECT_NAME="Env_exp_meps2_preop_rednmc06_t2h2"
+export MASTER_OUTPUT="out/${PROJECT_NAME}"
+export VERIF_PROJECT_NAME="${PROJECT_NAME}"
 
 # --- Experiment Configuration ---
 export MONITOR_EXP_BASES="meps2_preop_rednmc06mbr000 meps2_preop_rednmc06_t2h2mbr000"
@@ -86,7 +88,7 @@ rm -rf '"'
 # full path of MASTER_OUTPUT
 echo "Open locally with:"
 FULL_MASTER_OUTPUT=$(realpath ${MASTER_OUTPUT})
-echo VERIF_DATA_PATH="${FULL_MASTER_OUTPUT}" php -S localhost:8000 -t webapp
+echo VERIF_PROJECT_NAME="${PROJECT_NAME}" VERIF_DATA_PATH="${FULL_MASTER_OUTPUT}" php -S localhost:8000 -t webapp
 
 # --- Generate Static Webapp ---
 echo -e "
@@ -98,18 +100,18 @@ rm -rf "${WEBAPP_OUTPUT}"
 mkdir -p "${WEBAPP_OUTPUT}"
 
 # Generate JSON data
-VERIF_DATA_PATH="${FULL_MASTER_OUTPUT}" php webapp/api.php > "${WEBAPP_OUTPUT}/projects.json"
+VERIF_PROJECT_NAME="${PROJECT_NAME}" VERIF_DATA_PATH="${FULL_MASTER_OUTPUT}" php webapp/api.php > "${WEBAPP_OUTPUT}/projects.json"
 if [ $MONITOR -eq 1 ]; then
     echo "Generating Monitor scorecard"
-VERIF_DATA_PATH="${FULL_MASTER_OUTPUT}" php webapp/api.php -- --action get_scorecard_data --project monitor > "${WEBAPP_OUTPUT}/monitor_scorecard.json"
+    VERIF_PROJECT_NAME="${PROJECT_NAME}" VERIF_DATA_PATH="${FULL_MASTER_OUTPUT}" php webapp/api.php -- --action get_scorecard_data --project monitor > "${WEBAPP_OUTPUT}/monitor_scorecard.json"
 fi
 if [ $OBSVER -eq 1 ]; then
     echo "Generating Obsver scorecard"
-VERIF_DATA_PATH="${FULL_MASTER_OUTPUT}" php webapp/api.php -- --action get_scorecard_data --project obsver > "${WEBAPP_OUTPUT}/obsver_scorecard.json"
+    VERIF_PROJECT_NAME="${PROJECT_NAME}" VERIF_DATA_PATH="${FULL_MASTER_OUTPUT}" php webapp/api.php -- --action get_scorecard_data --project obsver > "${WEBAPP_OUTPUT}/obsver_scorecard.json"
 fi
 
 # Copy webapp files
-cp webapp/index.php "${WEBAPP_OUTPUT}/index.html"
+VERIF_PROJECT_NAME="${PROJECT_NAME}" php webapp/index.php > "${WEBAPP_OUTPUT}/index.html"
 mkdir -p "${WEBAPP_OUTPUT}/js"
 cp webapp/js/main.js "${WEBAPP_OUTPUT}/js/main.js"
 # Inject monitor order config for the static bundle

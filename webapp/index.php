@@ -1,14 +1,26 @@
+<?php
+$project_name = getenv('VERIF_PROJECT_NAME');
+if (!$project_name) {
+    $project_name_file = __DIR__ . '/project_name';
+    if (is_file($project_name_file)) {
+        $project_name = trim(file_get_contents($project_name_file));
+    }
+}
+if (!$project_name) {
+    $project_name = 'Unified Verification Report';
+}
+?>
 <!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>Unified Verification Report</title>
+    <title><?= htmlspecialchars($project_name, ENT_QUOTES, 'UTF-8'); ?></title>
     <link rel="stylesheet" href="css/style.css">
 </head>
 <body>
     <div class="container">
         <header>
-            <h1>Unified Verification Report</h1>
+            <h1><?= htmlspecialchars($project_name, ENT_QUOTES, 'UTF-8'); ?></h1>
         </header>
 
         <div id="topbar">

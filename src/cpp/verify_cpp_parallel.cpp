@@ -19,8 +19,79 @@
 #include <omp.h>
 #include <cstdlib>
 #include <sstream>
+#include <cctype>
 
 namespace fs = std::filesystem;
+
+struct HourFilter {
+    bool restrict = false;
+    std::unordered_set<int> hours;
+
+    bool allows(int hour) const {
+        if (!restrict) return true;
+        int normalized = hour % 24;
+        if (normalized < 0) normalized += 24;
+        return hours.find(normalized) != hours.end();
+    }
+};
+
+HourFilter build_hour_filter(const char* env_name, const std::vector<int>& fallback_hours) {
+    HourFilter filter;
+    auto add_hour = [&](int hour) {
+        int normalized = hour % 24;
+        if (normalized < 0) normalized += 24;
+        filter.hours.insert(normalized);
+    };
+
+    const char* env_val = std::getenv(env_name);
+    if (env_val && *env_val) {
+        std::istringstream iss(env_val);
+        std::string token;
+        while (iss >> token) {
+            std::string lowered = token;
+            std::transform(lowered.begin(), lowered.end(), lowered.begin(), [](unsigned char c){ return std::tolower(c); });
+            if (lowered == "*" || lowered == "all") {
+                filter.restrict = false;
+                filter.hours.clear();
+                return filter;
+            }
+            try {
+                int hour = std::stoi(token);
+                add_hour(hour);
+            } catch (...) {
+                continue;
+            }
+        }
+        if (!filter.hours.empty()) {
+            filter.restrict = true;
+            return filter;
+        }
+    }
+
+    if (!fallback_hours.empty()) {
+        for (int hour : fallback_hours) {
+            add_hour(hour);
+        }
+        if (!filter.hours.empty()) {
+            filter.restrict = true;
+        }
+    }
+    return filter;
+}
+
+void log_hour_filter(const std::string& name, const HourFilter& filter) {
+    if (!filter.restrict) {
+        std::cout << name << " hour filter: all hours allowed" << std::endl;
+        return;
+    }
+    std::vector<int> hours(filter.hours.begin(), filter.hours.end());
+    std::sort(hours.begin(), hours.end());
+    std::cout << name << " hour filter (UTC):";
+    for (int hour : hours) {
+        std::cout << " " << hour;
+    }
+    std::cout << std::endl;
+}
 
 int main(int argc, char* argv[]) {
     // Simplified argument parsing
@@ -151,6 +222,11 @@ int main(int argc, char* argv[]) {
     };
     const auto precip_windows = build_precip_windows(parse_env_list("SURFPAR_MONITOR"));
 
+    HourFilter tn_hour_filter = build_hour_filter("TN_VALID_HOURS", {6});
+    HourFilter tx_hour_filter = build_hour_filter("TX_VALID_HOURS", {18});
+    log_hour_filter("TN", tn_hour_filter);
+    log_hour_filter("TX", tx_hour_filter);
+
     // Precompute forecast cumulative precipitation totals per (experiment|base_time)->lead->station
     std::unordered_map<std::string, std::map<int, std::unordered_map<int,double>>> precip_totals;
     if (!precip_windows.empty()) {
@@ -207,6 +283,8 @@ int main(int argc, char* argv[]) {
             if (common_valid_times.find(vfld_info.valid_time) == common_valid_times.end()) { continue; }
             auto it_vobs = vobs_data_map.find(vfld_info.valid_time);
             if (it_vobs == vobs_data_map.end()) { continue; }
+            int vt_hour_component = static_cast<int>(vfld_info.valid_time % 100);
+            if (vt_hour_component < 0) vt_hour_component += 24;
             
             const auto& vobs_stations = it_vobs->second.stations;
             const auto& vobs_temp_levels = it_vobs->second.temp_levels;
@@ -238,8 +316,16 @@ int main(int argc, char* argv[]) {
                         else if(var=="DD")process_var("DD",station_vfld.dd,station_vobs.dd);
                         else if(var=="TT")process_var("TT",station_vfld.tt,station_vobs.tt);
                         else if(var=="TTHA")process_var("TTHA",station_vfld.ttha,station_vobs.ttha);
-                        else if(var=="TN")process_var("TN",station_vfld.tn,station_vobs.tn);
-                        else if(var=="TX")process_var("TX",station_vfld.tx,station_vobs.tx);
+                        else if(var=="TN") {
+                            if (tn_hour_filter.allows(vt_hour_component)) {
+                                process_var("TN",station_vfld.tn,station_vobs.tn);
+                            }
+                        }
+                        else if(var=="TX") {
+                            if (tx_hour_filter.allows(vt_hour_component)) {
+                                process_var("TX",station_vfld.tx,station_vobs.tx);
+                            }
+                        }
                         else if(var=="TD")process_var("TD",station_vfld.td,station_vobs.td);
                         else if(var=="TDD"){
                             double f = (station_vfld.tt>-98.0 && station_vfld.td>-98.0)? (station_vfld.tt - station_vfld.td) : -999.0;
